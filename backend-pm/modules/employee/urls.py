@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import LeaveTypeCreateView, LeaveTypeListView, LeaveTypeUpdateView, LeaveTypeDeleteView, LeavePolicyCreateView, LeavePolicyListView, LeavePolicyUpdateView, LeavePolicyDeleteView, EmployeeLeaveBalanceView, AdminLeaveBalancesView, ApplyForLeaveView, EmployeeLeaveRequestsView, AdminLeaveRequestsView, ViewLeaveRequestView, UpdateLeaveRequestStatusView
-from .views import CompanyListCreateAPIView, CreateEmployeeView, ApproveRejectLeaveRequest, EmployeeListView, CurrentEmployeeView, ReporteesLeaveRequestsView, ReporteesListView, reset_leave_balances, reset_leave, TestResetLeaveBalanceView
+from .views import CompanyListCreateAPIView, CreateEmployeeView, ApproveRejectLeaveRequest, EmployeeListView, CurrentEmployeeView, ReporteesLeaveRequestsView, ReporteesListView, reset_leave_balances, reset_leave, TestResetLeaveBalanceView, ReporteesLeaveBalanceView
 
 urlpatterns = [
     path('companies/', CompanyListCreateAPIView.as_view(), name='company_list_create'),
@@ -28,6 +28,7 @@ urlpatterns = [
     path('leave-requests/<int:pk>/', ViewLeaveRequestView.as_view(), name='view_leave_request'),
     path('reportees/', ReporteesListView.as_view(), name='reportees_list'),
     path('reportees/leave-requests/', ReporteesLeaveRequestsView.as_view(), name='reportees_leave_requests'),
+    path('reportees/leave-balances/', ReporteesLeaveBalanceView.as_view(), name='reportees_leave_balances'),
     path('leave-requests/<int:pk>/update-status/', UpdateLeaveRequestStatusView.as_view(), name='update_leave_request_status'),
     path('leave-requests/<int:leave_id>/approve-reject/', ApproveRejectLeaveRequest.as_view(), name='approve_reject_leave_request'),
     # Reset Leaves

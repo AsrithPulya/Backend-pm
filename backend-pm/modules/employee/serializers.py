@@ -37,6 +37,14 @@ class EmployeeLeaveRequestSerializer(serializers.ModelSerializer):
             'leave_day_type', 'reporting_manager', 'reason_for_leave', 'status_of_leave'
         ]
 
+class ReporteeLeaveBalanceSerializer(serializers.Serializer):
+    first_name = serializers.CharField()
+    employee = serializers.CharField()
+    leave_type = serializers.CharField()
+    total_allocated = serializers.IntegerField()
+    total_taken = serializers.FloatField()  # Float to account for partial days
+    remaining_balance = serializers.FloatField()
+
 
 
 
