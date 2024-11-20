@@ -33,7 +33,8 @@ class LoginUser(APIView):
             return Response({
                 "message": "Login successful",
                 "access_token": str(access_token),
-                "role": user.get_role_display(),   
+                "username": user.username,
+                "role": user.get_role_display(),
             }, status=status.HTTP_200_OK)
         else:
             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)

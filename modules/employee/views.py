@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.contrib import messages
 from datetime import date
 from .models import LeaveTypeIndex, Company, LeavePolicyTypes, EmployeeLeavesRequests, Employee
-from .serializers import LeaveTypeIndexSerializer, LeavePolicyTypesSerializer, EmployeeLeaveRequestSerializer, CompanyMainSerializer, EmployeeSerializer, EmployeeLeavesRequests
+from .serializers import LeaveTypeIndexSerializer, LeavePolicyTypesSerializer, EmployeeLeaveRequestSerializer, CompanyMainSerializer, EmployeeSerializer, EmployeeLeavesRequests, ReporteeLeaveBalanceSerializer
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import F, Sum, IntegerField, ExpressionWrapper, DurationField
 from datetime import timedelta
@@ -18,6 +18,7 @@ from rest_framework.exceptions import ValidationError
 from django.http import JsonResponse
 from datetime import datetime
 from django.db.models import Sum, F
+from django.utils import timezone
 
 #Adding a Company
 class CompanyListCreateAPIView(APIView):
@@ -488,6 +489,61 @@ class TestResetLeaveBalanceView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+class ReporteesLeaveBalanceView(APIView):
+    def get(self, request):
+        leave_balances = []
+        
+        # Adjusted filtering to access the 'reporting_manager' via 'user'
+        reportees = Employee.objects.filter(user__reporting_manager=request.user)
 
+        for reportee in reportees:
+            leave_types = LeaveTypeIndex.objects.filter(company=reportee.company)
 
+            for leave_type in leave_types:
+                try:
+                    leave_policy = LeavePolicyTypes.objects.get(leave_type=leave_type)
+                    max_days = leave_policy.max_days
+                except LeavePolicyTypes.DoesNotExist:
+                    max_days = 0
+
+                existing_leave_requests = EmployeeLeavesRequests.objects.filter(
+                    employee=reportee,
+                    leave_type=leave_type,
+                    status_of_leave__in=['Approved', 'Pending']
+                )
+
+                total_existing_days = sum(
+                    count_business_days(leave_request.start_date, leave_request.end_date)
+                    for leave_request in existing_leave_requests
+                )
+
+                if leave_policy.carry_forward:
+                    remaining_days = max(0, max_days - total_existing_days)
+                    carry_forward_limit = 20  # Adjust if needed
+                    carried_forward_days = min(remaining_days, carry_forward_limit) if carry_forward_limit else remaining_days
+                    remaining_balance = max(0, max_days - total_existing_days + carried_forward_days)
+                else:
+                    remaining_balance = max(0, max_days - total_existing_days)
+
+                # Check if the employee is on leave today
+                today = timezone.now().date()
+                on_leave_today = EmployeeLeavesRequests.objects.filter(
+                    employee=reportee,
+                    leave_type=leave_type,
+                    start_date__lte=today,
+                    end_date__gte=today,
+                    status_of_leave='Approved'
+                ).exists()
+
+                leave_balances.append({
+                    'reportee_first_name': reportee.user.first_name,
+                    'reportee_last_name': reportee.user.last_name,
+                    'leave_type': leave_type.leavename,
+                    'total_allocated': max_days,
+                    'total_taken': total_existing_days,
+                    'remaining_balance': remaining_balance,
+                    'on_leave_today': on_leave_today  # New field to check if on leave today
+                })
+
+        return Response(leave_balances, status=status.HTTP_200_OK)
 
