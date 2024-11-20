@@ -37,8 +37,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'account',
-    'employee',
+    'modules.account',
+    'modules.employee',
     'rest_framework_simplejwt',
     'corsheaders',
 ]
@@ -112,7 +112,8 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'peoplemanagement',
         'USER': 'root',
-        'PASSWORD': 'rootpassword',
+        # 'PASSWORD': 'rootpassword',
+        'PASSWORD': 'Boss@8055',
         'HOST': 'localhost',  
         'PORT': '3306',       
     }

@@ -22,7 +22,7 @@ class RegisterUser(APIView):
 
 class LoginUser(APIView):
     permission_classes = [AllowAny]  
-    def post(self, request):
+    def post(self, request):       
         username = request.data.get('username')
         password = request.data.get('password')
         
@@ -32,7 +32,8 @@ class LoginUser(APIView):
             access_token = AccessToken.for_user(user)
             return Response({
                 "message": "Login successful",
-                "access_token": str(access_token)  
+                "access_token": str(access_token),
+                "role": user.get_role_display(),   
             }, status=status.HTTP_200_OK)
         else:
             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)

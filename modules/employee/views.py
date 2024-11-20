@@ -96,8 +96,6 @@ class LeaveTypeDeleteView(APIView):
         leave_type.delete()
         return Response({'message': 'Leave type deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
 
-
-
 # LEAVE POLICY MANAGEMENT
 # Creating a Leave Policy
 class LeavePolicyCreateView(APIView):

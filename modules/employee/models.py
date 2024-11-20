@@ -2,7 +2,7 @@ from django.db import models
 import string
 import random
 from django import forms
-from account.models import User
+from modules.account.models import User
 from datetime import date
 #EMPLOYEE REGISTRATION MODULE
 #Company Main Model
