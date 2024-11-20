@@ -19,6 +19,8 @@ from django.http import JsonResponse
 from datetime import datetime
 from django.db.models import Sum, F
 from django.utils import timezone
+from django.core.paginator import Paginator
+
 
 #Adding a Company
 class CompanyListCreateAPIView(APIView):
@@ -330,14 +332,15 @@ class EmployeeLeaveRequestsView(APIView):
         leave_requests = EmployeeLeavesRequests.objects.filter(employee=request.user.employee)
         serializer = EmployeeLeaveRequestSerializer(leave_requests, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
+
 class ReporteesLeaveRequestsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         # Get the logged-in user's reportees' leave requests
         reportees = request.user.reportees.all()  # Get the reportees of the logged-in user
-        leave_requests = EmployeeLeavesRequests.objects.filter(employee__user__in=reportees)
+        leave_requests = EmployeeLeavesRequests.objects.filter(employee__user__in=reportees).order_by('-id')
+        paginator = Paginator(leave_requests, 1)  # Show 10 leave requests per page
 
         serializer = EmployeeLeaveRequestSerializer(leave_requests, many=True)
         return Response(serializer.data)
