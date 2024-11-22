@@ -7,7 +7,7 @@ class User(AbstractUser):
         (2, 'Employee'),
         (3, 'Manager'),
     ]
-    
+    email = models.EmailField(unique=True)
     role = models.IntegerField(choices=ROLE_CHOICES, default=2)
     reporting_manager = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='reportees')
     
