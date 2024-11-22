@@ -5,7 +5,7 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.contrib import messages
 from datetime import date
-from .models import LeaveTypeIndex, Company, LeavePolicyTypes, EmployeeLeavesRequests, Employee
+from .models import LeaveTypeIndex, Company, LeavePolicyTypes, EmployeeLeavesRequests, Employee, EmployeeLeavesRequestsDates
 from .serializers import LeaveTypeIndexSerializer, LeavePolicyTypesSerializer, EmployeeLeaveRequestSerializer, CompanyMainSerializer, EmployeeSerializer, EmployeeLeavesRequests, ReporteeLeaveBalanceSerializer
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import F, Sum, IntegerField, ExpressionWrapper, DurationField
@@ -302,51 +302,74 @@ class LeavePolicyDeleteView(APIView):
 # View for the employee to see all his Leaves
 class EmployeeLeaveBalanceView(APIView):
     def get(self, request):
-        employee = request.user.employee
-        leave_balances = []
-        leave_types = LeaveTypeIndex.objects.filter(company=employee.company)
+        try:
+            # Get the employee linked to the current user
+            employee = request.user.employee
+            leave_balances = []
 
-        for leave_type in leave_types:
-            try:
-                # Getting the max days allocated for the leave type
-                leave_policy = LeavePolicyTypes.objects.get(leave_type=leave_type)
-                max_days = leave_policy.max_days
-            except LeavePolicyTypes.DoesNotExist:
-                max_days = 0
+            # Fetch all leave types for the employee's company
+            leave_types = LeaveTypeIndex.objects.filter(company=employee.company)
 
-            # Getting all existing approved or pending leave requests for the employee and leave type
-            existing_leave_requests = EmployeeLeavesRequests.objects.filter(
-                employee_id=employee,
-                leave_type=leave_type,
-                status_of_leave__in=['Approved', 'Pending']
-            )
+            for leave_type in leave_types:
+                try:
+                    # Fetch the leave policy for the current leave type
+                    leave_policy = LeavePolicyTypes.objects.get(leave_type=leave_type)
+                    max_days = leave_policy.max_days
+                    carry_forward_enabled = leave_policy.carry_forward
+                    carry_forward_type = leave_policy.carry_forward_type
+                    carry_forward_limit = 20  # Define a global limit for carry-forward days
+                except LeavePolicyTypes.DoesNotExist:
+                    # If no policy is defined, default values
+                    max_days = 0
+                    carry_forward_enabled = False
+                    carry_forward_type = None
+                    carry_forward_limit = 0
 
-            # Calculate the total business days for existing leave requests
-            total_existing_days = sum(
-                count_business_days(leave_request.start_date, leave_request.end_date)
-                for leave_request in existing_leave_requests
-            )
+                # Filter leave requests for the employee for this leave type with relevant statuses
+                leave_requests = EmployeeLeavesRequests.objects.filter(
+                    employee=employee,
+                    leave_type=leave_type,
+                    status_of_leave__in=['Approved', 'Pending']
+                )
 
-            # If carry_forward is allowed, include it in the calculation
-            if leave_policy.carry_forward:
-                remaining_days = max(0, max_days - total_existing_days)
-                carry_forward_limit = 20 #leave_policy.carry_forward_limit  # field for max carry-forward
-                carried_forward_days = min(remaining_days, carry_forward_limit) if carry_forward_limit else remaining_days
-                remaining_balance = max(0, max_days - total_existing_days + carried_forward_days)
-            else:
-                # No carry-forward logic; calculate normally
-                remaining_balance = max(0, max_days - total_existing_days)
+                # Sum all business days for approved or pending leave requests
+                total_taken_days = sum(
+                    1 if leave_date.leave_day_type == 'Full day' else 0.5
+                    for leave_request in leave_requests
+                    for leave_date in leave_request.employee_leaves_requests_dates.all()
+                )
 
-            # Add leave balance information to the response
-            leave_balances.append({
-                'leave_type': leave_type.leavename,
-                'total_allocated': max_days,
-                'total_taken': total_existing_days,
-                'remaining_balance': remaining_balance
-            })
+                # Calculate the remaining balance considering carry-forward logic
+                if carry_forward_enabled:
+                    # Calculate days left from current policy
+                    remaining_days = max(0, max_days - total_taken_days)
 
-        # Return the response with the leave balances
-        return Response(leave_balances, status=status.HTTP_200_OK)
+                    # Calculate carry-forwarded days, respecting the limit
+                    carried_forward_days = min(remaining_days, carry_forward_limit)
+
+                    # Final balance includes carry-forwarded days
+                    remaining_balance = max(0, max_days - total_taken_days + carried_forward_days)
+                else:
+                    # Standard calculation without carry-forward
+                    remaining_balance = max(0, max_days - total_taken_days)
+
+                # Add leave balance details to the response
+                leave_balances.append({
+                    'leave_type': leave_type.leavename,
+                    'total_allocated': max_days,
+                    'total_taken': total_taken_days,
+                    'remaining_balance': remaining_balance,
+                    'carry_forwarded': carried_forward_days if carry_forward_enabled else 0,
+                    'carry_forward_type': carry_forward_type if carry_forward_enabled else None,
+                })
+
+            # Return the computed leave balances
+            return Response(leave_balances, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 # View for Admin to see all the employee leaves
 class AdminLeaveBalancesView(APIView):
@@ -390,6 +413,24 @@ def count_business_days(start_date, end_date):
     print(f"Counting business days from {start_date} to {end_date}: {business_days} days")
     return business_days
 
+LEAVE_DAY_TYPE = (
+    ('Full day', 'Full day'),
+    ('Half day (1st half)', 'Half day (1st half)'),
+    ('Half day (2nd half)', 'Half day (2nd half)'),
+)
+from datetime import datetime, timedelta
+from calendar import day_name
+# def count_business_days(start_date, end_date):
+#     """
+#     Calculate the number of business days (excluding weekends) between two dates.
+#     """
+#     business_days = 0
+#     current_date = start_date
+#     while current_date <= end_date:
+#         if current_date.weekday() < 5:  # Monday to Friday are business days
+#             business_days += 1
+#         current_date += timedelta(days=1)
+#     return business_days
 class ApplyForLeaveView(APIView):
     def post(self, request):
         # Extract data from the request
@@ -489,17 +530,31 @@ class EmployeeLeaveRequestsView(APIView):
         serializer = EmployeeLeaveRequestSerializer(leave_requests, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+from rest_framework.pagination import PageNumberPagination
+class ReporteesLeaveRequestsPagination(PageNumberPagination):
+    page_size = 10  
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
 class ReporteesLeaveRequestsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Get the logged-in user's reportees' leave requests
-        reportees = request.user.reportees.all()  # Get the reportees of the logged-in user
-        leave_requests = EmployeeLeavesRequests.objects.filter(employee__user__in=reportees).order_by('-id')
-        paginator = Paginator(leave_requests, 1)  # Show 10 leave requests per page
+        # Fetch reportees' leave requests
+        reportees = request.user.reportees.all()  
+        leave_requests = EmployeeLeavesRequests.objects.filter(
+            employee__user__in=reportees
+        ).order_by('-id')
 
-        serializer = EmployeeLeaveRequestSerializer(leave_requests, many=True)
-        return Response(serializer.data)
+        # Paginate results
+        paginator = ReporteesLeaveRequestsPagination()
+        paginated_leave_requests = paginator.paginate_queryset(leave_requests, request)
+
+        # Serialize the paginated data
+        serializer = EmployeeLeaveRequestSerializer(paginated_leave_requests, many=True)
+
+        # Return paginated response
+        return paginator.get_paginated_response(serializer.data)
 
 # View for Admin to see the leaves of employees specifically
 class AdminLeaveRequestsView(APIView):
@@ -609,9 +664,9 @@ def reset_leave(employee, leave_type, policy):
 class TestResetLeaveBalanceView(APIView):
     def post(self, request):
         try:
-            # Simulate the reset leave logic manually 
             current_date = datetime.now().date()
-            if current_date.day >= 1:  
+
+            if current_date.day >= 1:  # Ensure reset happens on the 1st day of the month
                 employees = Employee.objects.all()
 
                 for employee in employees:
@@ -621,90 +676,121 @@ class TestResetLeaveBalanceView(APIView):
                         try:
                             policy = LeavePolicyTypes.objects.get(leave_type=leave_type)
                         except LeavePolicyTypes.DoesNotExist:
-                            policy = None
                             continue
 
-                        if policy and (policy.carry_forward_type == 'monthly' or (policy.carry_forward_type == 'quarterly' and current_date.month in [1, 4, 7, 10])):
-                            
-                            # Calculate the total approved leaves taken for the employee and leave type
-                            total_approved_days = EmployeeLeavesRequests.objects.filter(
-                                leave_type=leave_type,
-                                employee=employee,
-                                status_of_leave='Approved'
-                            ).count()
+                        # Calculate total approved days taken for the leave type
+                        total_approved_days = EmployeeLeavesRequestsDates.objects.filter(
+                            employee__employee=employee,
+                            employee__leave_type=leave_type,
+                            employee__status_of_leave='Approved'
+                        ).count()
 
-                            # Calculate remaining balance based on policy
-                            if policy.carry_forward:
-                                remaining_balance = max(0, policy.max_days - total_approved_days)
-                            else:
-                                remaining_balance = policy.max_days
+                        # Determine remaining balance
+                        remaining_balance = max(0, policy.max_days - total_approved_days)
 
-                            # Optionally, reset the leave taken count
-                            EmployeeLeavesRequests.objects.filter(employee=employee, leave_type=leave_type, status_of_leave='Approved').delete()
+                        # Handle carry-forward logic
+                        if policy.carry_forward:
+                            carry_forward_limit = 20  # Define carry-forward limit
+                            carry_forwarded_days = min(remaining_balance, carry_forward_limit)
+                        else:
+                            carry_forwarded_days = 0
 
-                            # Print the result for each employee and leave type (for testing purposes)
-                            print(f"Leave balance reset for {employee.user.first_name} {employee.user.last_name} for {leave_type.leavename} - Remaining Balance: {remaining_balance}")
-            
-            return Response({"message": "Leave balances manually reset triggered."}, status=status.HTTP_200_OK)
-        
+                        # Reset leave requests and mark them as "Reset"
+                        EmployeeLeavesRequests.objects.filter(
+                            employee=employee, 
+                            leave_type=leave_type, 
+                            status_of_leave='Approved'
+                        ).update(status_of_leave='Reset')
+
+                        # Optionally update leave balance tracking (if using a separate model/table)
+
+                        # Debug output for logging
+                        print(f"Employee: {employee.user.first_name} {employee.user.last_name}")
+                        print(f"Leave Type: {leave_type.leavename}")
+                        print(f"Remaining Balance: {remaining_balance}")
+                        print(f"Carry-Forwarded Days: {carry_forwarded_days}")
+                        print(f"New Allocation: {policy.max_days + carry_forwarded_days}")
+
+                # Success response
+                return Response({"message": "Leave balances reset successfully with carry-forward logic."}, status=status.HTTP_200_OK)
+            else:
+                # Return error if the API is called on a day other than the 1st
+                return Response({"message": "Reset only happens on the 1st of the month."}, status=status.HTTP_400_BAD_REQUEST)
+
         except Exception as e:
+            # Handle errors gracefully
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class ReporteesLeaveBalanceView(APIView):
     def get(self, request):
-        leave_balances = []
-        
-        # Adjusted filtering to access the 'reporting_manager' via 'user'
-        reportees = Employee.objects.filter(user__reporting_manager=request.user)
+        try:
+            leave_balances = []
 
-        for reportee in reportees:
-            leave_types = LeaveTypeIndex.objects.filter(company=reportee.company)
+            # Filter reportees based on the reporting manager (current user)
+            reportees = Employee.objects.filter(user__reporting_manager=request.user)
 
-            for leave_type in leave_types:
-                try:
-                    leave_policy = LeavePolicyTypes.objects.get(leave_type=leave_type)
-                    max_days = leave_policy.max_days
-                except LeavePolicyTypes.DoesNotExist:
-                    max_days = 0
+            for reportee in reportees:
+                leave_types = LeaveTypeIndex.objects.filter(company=reportee.company)
 
-                existing_leave_requests = EmployeeLeavesRequests.objects.filter(
-                    employee=reportee,
-                    leave_type=leave_type,
-                    status_of_leave__in=['Approved', 'Pending']
-                )
+                for leave_type in leave_types:
+                    try:
+                        # Fetch the leave policy for the leave type
+                        leave_policy = LeavePolicyTypes.objects.get(leave_type=leave_type)
+                        max_days = leave_policy.max_days
+                        carry_forward_enabled = leave_policy.carry_forward
+                        carry_forward_limit = 6  # Define a global limit for carry-forward days
+                    except LeavePolicyTypes.DoesNotExist:
+                        # Default policy values
+                        max_days = 0
+                        carry_forward_enabled = False
+                        carry_forward_limit = 0
 
-                total_existing_days = sum(
-                    count_business_days(leave_request.start_date, leave_request.end_date)
-                    for leave_request in existing_leave_requests
-                )
+                    # Fetch approved or pending leave requests for the reportee and leave type
+                    leave_requests = EmployeeLeavesRequests.objects.filter(
+                        employee=reportee,
+                        leave_type=leave_type,
+                        status_of_leave__in=['Approved', 'Pending']
+                    )
 
-                if leave_policy.carry_forward:
-                    remaining_days = max(0, max_days - total_existing_days)
-                    carry_forward_limit = 20  # Adjust if needed
-                    carried_forward_days = min(remaining_days, carry_forward_limit) if carry_forward_limit else remaining_days
-                    remaining_balance = max(0, max_days - total_existing_days + carried_forward_days)
-                else:
-                    remaining_balance = max(0, max_days - total_existing_days)
+                    # Calculate total leave days taken
+                    total_taken_days = sum(
+                        1 if leave_date.leave_day_type == 'Full day' else 0.5
+                        for leave_request in leave_requests
+                        for leave_date in leave_request.employee_leaves_requests_dates.all()
+                    )
 
-                # Check if the employee is on leave today
-                today = timezone.now().date()
-                on_leave_today = EmployeeLeavesRequests.objects.filter(
-                    employee=reportee,
-                    leave_type=leave_type,
-                    start_date__lte=today,
-                    end_date__gte=today,
-                    status_of_leave='Approved'
-                ).exists()
+                    # Calculate remaining balance, considering carry-forward if applicable
+                    if carry_forward_enabled:
+                        remaining_days = max(0, max_days - total_taken_days)
+                        carried_forward_days = min(remaining_days, carry_forward_limit)
+                        remaining_balance = max(0, max_days - total_taken_days + carried_forward_days)
+                    else:
+                        remaining_balance = max(0, max_days - total_taken_days)
 
-                leave_balances.append({
-                    'reportee_first_name': reportee.user.first_name,
-                    'reportee_last_name': reportee.user.last_name,
-                    'leave_type': leave_type.leavename,
-                    'total_allocated': max_days,
-                    'total_taken': total_existing_days,
-                    'remaining_balance': remaining_balance,
-                    'on_leave_today': on_leave_today  # New field to check if on leave today
-                })
+                    # Check if the reportee is on leave today
+                    today = timezone.now().date()
+                    on_leave_today = EmployeeLeavesRequestsDates.objects.filter(
+                        employee__employee=reportee,
+                        date=today,
+                        employee__leave_type=leave_type,
+                        employee__status_of_leave='Approved'
+                    ).exists()
 
-        return Response(leave_balances, status=status.HTTP_200_OK)
+                    # Append leave balance details
+                    leave_balances.append({
+                        'reportee_first_name': reportee.user.first_name,
+                        'reportee_last_name': reportee.user.last_name,
+                        'leave_type': leave_type.leavename,
+                        'total_allocated': max_days,
+                        'total_taken': total_taken_days,
+                        'remaining_balance': remaining_balance,
+                        'on_leave_today': on_leave_today
+                    })
 
+            # Return the computed leave balances for reportees
+            return Response(leave_balances, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            # Return an error response in case of failure
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

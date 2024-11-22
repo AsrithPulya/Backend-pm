@@ -87,12 +87,17 @@ LEAVE_DAY_TYPE = (
     ('Half day (2nd half)', 'Half day (2nd half)'),
 )
 #Employee Leave Requests Model
+
+
 class EmployeeLeavesRequests(models.Model):
-    employee = models.ForeignKey(Employee, related_name="employee_leaves", on_delete=models.CASCADE)
+    employee = models.ForeignKey(Employee, related_name="employee_leaves_requests", on_delete=models.CASCADE)
     leave_type = models.ForeignKey(LeaveTypeIndex, on_delete=models.CASCADE)
-    start_date = models.DateField(default=date.today)
-    end_date = models.DateField(default=date.today)
-    leave_day_type = models.CharField(max_length=20, choices=LEAVE_DAY_TYPE, default='Full day')
     reporting_manager = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     reason_for_leave = models.TextField()
     status_of_leave = models.CharField(max_length=10, choices=LEAVE_STATUS, default='Pending')
+
+#Employee Leave Requests Model
+class EmployeeLeavesRequestsDates(models.Model):
+    employee = models.ForeignKey(EmployeeLeavesRequests, related_name="employee_leaves_requests_dates", on_delete=models.CASCADE)
+    date = models.DateField(default=date.today)
+    leave_day_type = models.CharField(max_length=20, choices=LEAVE_DAY_TYPE, default='Full day')
