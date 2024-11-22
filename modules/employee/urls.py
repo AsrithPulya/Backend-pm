@@ -11,13 +11,9 @@ def test_view(request):
 
  
 #files upload 
-
 router = DefaultRouter()
 router.register(r'files', UserFileViewSet, basename='userfile')
-
-
 router.register(r'employees', EmployeeViewSet, basename='employee')
-
 
 urlpatterns = [
     path('companies/', CompanyListCreateAPIView.as_view(), name='company_list_create'),
@@ -25,12 +21,10 @@ urlpatterns = [
     path('employees/create/', CreateEmployeeView.as_view(), name='create_employee'),
     path('employees/', EmployeeListView.as_view(), name='employee_list'),
     path('employees/me/', CurrentEmployeeView.as_view(), name='current_employee'),
-    # Leave Type Management
     path('profile-employees/', ProfileView.as_view(), name='employee_profiles'),
     path('profile/', UserProfileView.as_view(), name='user_profile'),
     path('profile/<int:pk>/', UserProfileView.as_view(), name='update_employee'),
-    
-    
+    # Leave Type Management
     path('leave-types/', LeaveTypeListView.as_view(), name='list_leave_types'),
     path('leave-types/create/', LeaveTypeCreateView.as_view(), name='create_leave_type'),
     path('leave-types/<int:pk>/update/', LeaveTypeUpdateView.as_view(), name='update_leave_type'),
