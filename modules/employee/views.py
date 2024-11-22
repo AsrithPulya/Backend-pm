@@ -20,6 +20,29 @@ from datetime import datetime
 from django.db.models import Sum, F
 from django.utils import timezone
 from django.core.paginator import Paginator
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework import permissions, generics
+from django.shortcuts import get_object_or_404
+from django.contrib import messages
+from datetime import date
+from .models import LeaveTypeIndex, Company, LeavePolicyTypes, EmployeeLeavesRequests, Employee
+from .serializers import LeaveTypeIndexSerializer, LeavePolicyTypesSerializer, EmployeeLeaveRequestSerializer, CompanyMainSerializer, EmployeeSerializer, EmployeeLeavesRequests, ProfileSerializer, UserProfileSerializer 
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import NotFound
+from rest_framework import viewsets
+from rest_framework.response import Response
+from .models import Employee
+from .serializers import EmployeeSerializer
+from django.shortcuts import get_object_or_404
+
+from django.core.files.storage import default_storage
+
+from rest_framework import viewsets, permissions
+from rest_framework.parsers import MultiPartParser, FormParser
+from .models import UserFile
+from .serializers import UserFileSerializer
 
 
 #Adding a Company
@@ -118,6 +141,141 @@ class LeavePolicyListView(APIView):
         policy_types = LeavePolicyTypes.objects.all()
         policy_types_serializer = LeavePolicyTypesSerializer(policy_types, many=True)
         return Response({'policy_types': policy_types_serializer.data}, status=status.HTTP_200_OK)
+
+class EmployeeViewSet(viewsets.ViewSet):
+   
+    def list(self, request):
+        employees = Employee.objects.all()
+        serializer = EmployeeSerializer(employees, many=True)
+        return Response(serializer.data)
+
+     
+    def retrieve(self, request, pk=None):
+        employee = get_object_or_404(Employee, pk=pk)
+        serializer = EmployeeSerializer(employee)
+        return Response(serializer.data)
+
+    def create(self, request):
+        serializer = EmployeeSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
+
+    def update(self, request, pk=None):
+        employee = get_object_or_404(Employee, pk=pk)
+        serializer = EmployeeSerializer(employee, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+    # Delete an employee
+    def destroy(self, request, pk=None):
+        employee = get_object_or_404(Employee, pk=pk)
+        employee.delete()
+        return Response(status=204)
+
+class UserFileViewSet(viewsets.ModelViewSet):
+    queryset = UserFile.objects.all()
+    serializer_class = UserFileSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+         
+        return UserFile.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+       serializer.save(user=self.request.user)
+
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        new_file = request.FILES.get('file', None)
+
+        
+        if new_file and instance.file:
+            try:
+                default_storage.delete(instance.file.path)
+            except Exception as e:
+                return Response(
+                    {"detail": f"Error deleting old file: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+         
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        file_instance = self.get_object()
+        if file_instance.user != request.user:
+            return Response(
+                {"detail": "You are not authorized to delete this file."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().destroy(request, *args, **kwargs)
+
+
+class ProfileView(APIView):
+    def get(self, request):
+        employees = Employee.objects.all()
+        serializer = ProfileSerializer(employees, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class EmployeeGetUpdateView(APIView):
+    def get(self, request, pk):
+        try:
+             
+            employee = Employee.objects.get(pk=pk)
+
+             
+            serializer = EmployeeSerializer(employee, data=request.data, partial=True)
+
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Employee.DoesNotExist:
+            return Response({"error": "Employee not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    def patch(self, request, pk):
+        try:
+            employee = Employee.objects.get(pk=pk)
+            serializer = EmployeeSerializer(employee, data=request.data, partial = True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Employee.DoesNotExist:
+            return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+
+class UserProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            employee = Employee.objects.get(user=request.user)
+        except Employee.DoesNotExist:
+            raise NotFound("Employee profile not found.")
+
+        serializer = UserProfileSerializer(employee)
+        return Response(serializer.data, status=200)
+    
+    def put(self, request, pk):
+        try:
+            employee = Employee.objects.get(pk=pk)
+            serializer = UserProfileSerializer(employee, data=request.data, partial = True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Employee.DoesNotExist:
+            return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
 
 # Updating the Leave Policies
 class LeavePolicyUpdateView(APIView):

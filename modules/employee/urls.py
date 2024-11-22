@@ -1,6 +1,23 @@
-from django.urls import path
-from .views import LeaveTypeCreateView, LeaveTypeListView, LeaveTypeUpdateView, LeaveTypeDeleteView, LeavePolicyCreateView, LeavePolicyListView, LeavePolicyUpdateView, LeavePolicyDeleteView, EmployeeLeaveBalanceView, AdminLeaveBalancesView, ApplyForLeaveView, EmployeeLeaveRequestsView, AdminLeaveRequestsView, ViewLeaveRequestView, UpdateLeaveRequestStatusView
-from .views import CompanyListCreateAPIView, CreateEmployeeView, ApproveRejectLeaveRequest, EmployeeListView, CurrentEmployeeView, ReporteesLeaveRequestsView, ReporteesListView, reset_leave_balances, reset_leave, TestResetLeaveBalanceView, ReporteesLeaveBalanceView
+from django.urls import path,include
+from django.http import JsonResponse
+from rest_framework.routers import DefaultRouter
+from .views import EmployeeViewSet, LeaveTypeCreateView, LeaveTypeListView, LeaveTypeUpdateView, LeaveTypeDeleteView, LeavePolicyCreateView, LeavePolicyListView, LeavePolicyUpdateView, LeavePolicyDeleteView, EmployeeLeaveBalanceView, AdminLeaveBalancesView, ApplyForLeaveView, EmployeeLeaveRequestsView, AdminLeaveRequestsView, ReporteesLeaveBalanceView, TestResetLeaveBalanceView, ViewLeaveRequestView, UpdateLeaveRequestStatusView, reset_leave_balances
+from .views import CompanyListCreateAPIView, CreateEmployeeView, ApproveRejectLeaveRequest, EmployeeListView, CurrentEmployeeView, ReporteesLeaveRequestsView, ReporteesListView, ProfileView, UserProfileView , UserFileViewSet, EmployeeGetUpdateView
+from django.conf import settings
+from django.conf.urls.static import static
+
+def test_view(request):
+    return JsonResponse({"message": "URL is working!"})
+
+ 
+#files upload 
+
+router = DefaultRouter()
+router.register(r'files', UserFileViewSet, basename='userfile')
+
+
+router.register(r'employees', EmployeeViewSet, basename='employee')
+
 
 urlpatterns = [
     path('companies/', CompanyListCreateAPIView.as_view(), name='company_list_create'),
@@ -9,6 +26,11 @@ urlpatterns = [
     path('employees/', EmployeeListView.as_view(), name='employee_list'),
     path('employees/me/', CurrentEmployeeView.as_view(), name='current_employee'),
     # Leave Type Management
+    path('profile-employees/', ProfileView.as_view(), name='employee_profiles'),
+    path('profile/', UserProfileView.as_view(), name='user_profile'),
+    path('profile/<int:pk>/', UserProfileView.as_view(), name='update_employee'),
+    
+    
     path('leave-types/', LeaveTypeListView.as_view(), name='list_leave_types'),
     path('leave-types/create/', LeaveTypeCreateView.as_view(), name='create_leave_type'),
     path('leave-types/<int:pk>/update/', LeaveTypeUpdateView.as_view(), name='update_leave_type'),
@@ -35,5 +57,7 @@ urlpatterns = [
     path('reset-leave-balances/', reset_leave_balances, name='reset_leave_balances'),
     path('test-reset-leave-balances/', TestResetLeaveBalanceView.as_view(), name='test_reset_leave_balances'),
    
+
+
 ]
 
