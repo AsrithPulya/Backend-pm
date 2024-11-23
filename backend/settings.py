@@ -119,6 +119,15 @@ DATABASES = {
     }
 }
 
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com' # mail service smtp
+EMAIL_HOST_USER = 'abhilash.work05@gmail.com' # email id
+EMAIL_HOST_PASSWORD = 'erdcsfaasyzocdiz' #password
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+FRONTEND_URL = 'http://localhost:3000/'
+
 
 
 # Password validation
@@ -141,8 +150,6 @@ AUTH_PASSWORD_VALIDATORS = [
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media') # Directory where uploaded files are saved
-
-
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
