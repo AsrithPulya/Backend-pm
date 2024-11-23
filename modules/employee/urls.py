@@ -2,7 +2,7 @@ from django.urls import path,include
 from django.http import JsonResponse
 from rest_framework.routers import DefaultRouter
 from .views import EmployeeViewSet, LeaveTypeCreateView, LeaveTypeListView, LeaveTypeUpdateView, LeaveTypeDeleteView, LeavePolicyCreateView, LeavePolicyListView, LeavePolicyUpdateView, LeavePolicyDeleteView, EmployeeLeaveBalanceView, AdminLeaveBalancesView, ApplyForLeaveView, EmployeeLeaveRequestsView, AdminLeaveRequestsView, ReporteesLeaveBalanceView, TestResetLeaveBalanceView, ViewLeaveRequestView, UpdateLeaveRequestStatusView, reset_leave_balances
-from .views import CompanyListCreateAPIView, CreateEmployeeView, ApproveRejectLeaveRequest, EmployeeListView, CurrentEmployeeView, ReporteesLeaveRequestsView, ReporteesListView, ProfileView, UserProfileView , UserFileViewSet, EmployeeGetUpdateView
+from .views import CompanyListCreateAPIView, CreateEmployeeView, ApproveRejectLeaveRequest, EmployeeListView, CurrentEmployeeView, ReporteesLeaveRequestsView, ReporteesListView, ProfileView, UserProfileView , UserFileViewSet, EmployeeGetUpdateView, HolidayListView, HolidayDetailView
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -50,8 +50,9 @@ urlpatterns = [
     # Reset Leaves
     path('reset-leave-balances/', reset_leave_balances, name='reset_leave_balances'),
     path('test-reset-leave-balances/', TestResetLeaveBalanceView.as_view(), name='test_reset_leave_balances'),
-   
-
+    #Holidays
+    path('holidays/', HolidayListView.as_view(), name='holiday_list'),
+    path('holidays/<int:pk>/', HolidayDetailView.as_view(), name='holiday_detail'),
 
 ]
 
