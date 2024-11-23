@@ -7,6 +7,7 @@ from .models import (
     Employee,
     EmployeeLeavesRequestsDates,
     UserFile,
+    Holidays,
 )
 
 class CompanyMainSerializer(serializers.ModelSerializer):
@@ -145,3 +146,8 @@ class ReporteeLeaveBalanceSerializer(serializers.Serializer):
     total_allocated = serializers.IntegerField()
     total_taken = serializers.FloatField()  # Float to account for partial days
     remaining_balance = serializers.FloatField()
+
+class HolidaySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Holidays
+        fields = ['id', 'holiday_name', 'holiday_date']

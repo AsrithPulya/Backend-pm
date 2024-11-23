@@ -7,17 +7,6 @@ from datetime import date
 from django.conf import settings
 #EMPLOYEE REGISTRATION MODULE
 #Company Main Model
-
-class UserFile(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    file = models.FileField(upload_to='user_files/')
-    file_name = models.CharField(max_length=255)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.user.username} - {self.file_name}"
-
-
 class Company(models.Model):
     company_name = models.CharField(max_length=40, unique=True)
     company_gstno = models.CharField(max_length=15, unique=True, null=False)  
@@ -57,6 +46,15 @@ class EmployeeAttachments(models.Model):
     created_on = models.DateTimeField(auto_now_add=True)
     file = models.FileField(upload_to='attachments/')
     employee = models.ForeignKey(Employee, related_name="employee_attachments", on_delete=models.CASCADE)
+#UserFiles Model
+class UserFile(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    file = models.FileField(upload_to='user_files/')
+    file_name = models.CharField(max_length=255)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.file_name}"
     
 #LEAVE MANAGEMENT MODULE
 #Types of Leaves Model
@@ -68,36 +66,39 @@ CARRYTYPE = (
     ('monthly','MONTHLY'),
     ('quarterly', 'QUARTERLY'),
 )
+#Leave Policies Model
 class LeavePolicyTypes(models.Model):
     max_days = models.IntegerField()
     carry_forward_type = models.CharField(max_length=10, choices=CARRYTYPE, default='monthly')
     carry_forward = models.BooleanField(default=False)
     leave_type = models.ForeignKey(LeaveTypeIndex, related_name="leave_policy_types", on_delete=models.CASCADE)
-
 LEAVE_STATUS = (
     ('Pending', 'Pending'),
     ('Approved', 'Approved'),
     ('Rejected', 'Rejected'),
     ('Cancelled', 'Cancelled'),
 )
-
 LEAVE_DAY_TYPE = (
     ('Full day', 'Full day'),
     ('Half day (1st half)', 'Half day (1st half)'),
     ('Half day (2nd half)', 'Half day (2nd half)'),
 )
 #Employee Leave Requests Model
-
-
 class EmployeeLeavesRequests(models.Model):
     employee = models.ForeignKey(Employee, related_name="employee_leaves_requests", on_delete=models.CASCADE)
     leave_type = models.ForeignKey(LeaveTypeIndex, on_delete=models.CASCADE)
     reporting_manager = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     reason_for_leave = models.TextField()
     status_of_leave = models.CharField(max_length=10, choices=LEAVE_STATUS, default='Pending')
-
-#Employee Leave Requests Model
+#Employee Leave Requests Dates Model
 class EmployeeLeavesRequestsDates(models.Model):
     employee = models.ForeignKey(EmployeeLeavesRequests, related_name="employee_leaves_requests_dates", on_delete=models.CASCADE)
     date = models.DateField(default=date.today)
-    leave_day_type = models.CharField(max_length=20, choices=LEAVE_DAY_TYPE, default='Full day')
+    # leave_day_type = models.CharField(max_length=20, choices=LEAVE_DAY_TYPE, default='Full day')
+    leave_day_type = models.CharField(max_length=50, null=True, choices=LEAVE_DAY_TYPE, default='Full day')
+#Holidays Model
+class Holidays(models.Model):
+    holiday_name = models.CharField(max_length=50)
+    holiday_date = models.DateField(default=date.today)
+    
+    
