@@ -100,5 +100,38 @@ class EmployeeLeavesRequestsDates(models.Model):
 class Holidays(models.Model):
     holiday_name = models.CharField(max_length=50)
     holiday_date = models.DateField(default=date.today)
-    
+#Model for Employee Leave Balance
+class EmployeeLeavesBalance(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    leave_type = models.ForeignKey(LeaveTypeIndex, on_delete=models.CASCADE)
+    total_allocated = models.PositiveIntegerField()  
+    remaining_balance = models.FloatField()  
+    used_leaves = models.FloatField()
+
+    @property
+    def used_leaves(self):
+        return self.total_allocated - self.remaining_balance
+
+    def save(self, *args, **kwargs):
+
+        if not self.total_allocated:
+            leave_policy = LeavePolicyTypes.objects.filter(leave_type=self.leave_type).first()
+            self.total_allocated = leave_policy.max_days if leave_policy else 0
+        if self.remaining_balance is None:
+            self.remaining_balance = self.total_allocated  # Initially, all leaves are unused.
+        super().save(*args, **kwargs)
+
+    def update_balance(self, leave_days):
+
+        self.remaining_balance -= leave_days
+        self.save()
+
+    def __str__(self):
+        return f"{self.employee} - {self.leave_type.leavename} Balance"
+
+
+
+
+
+
     
