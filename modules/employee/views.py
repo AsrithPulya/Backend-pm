@@ -245,11 +245,9 @@ class LeavePolicyCreateView(APIView):
     def post(self, request):
         policy_data = request.data
         policy_serializer = LeavePolicyTypesSerializer(data=policy_data)
-        
         if policy_serializer.is_valid():
             policy_serializer.save()
-            return Response({'message': 'Leave policy created successfully.'}, status=status.HTTP_201_CREATED)
-        
+            return Response(policy_serializer.data, status=status.HTTP_201_CREATED)
         return Response(policy_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 # Displaying all the leave policies
 class LeavePolicyListView(APIView):
