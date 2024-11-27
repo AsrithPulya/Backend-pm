@@ -2,7 +2,7 @@ from django.urls import path,include
 from django.http import JsonResponse
 from rest_framework.routers import DefaultRouter
 from .views import EmployeeViewSet, LeaveTypeCreateView, LeaveTypeListView, LeaveTypeUpdateView, LeaveTypeDeleteView, LeavePolicyCreateView, LeavePolicyListView, LeavePolicyUpdateView, LeavePolicyDeleteView, EmployeeLeaveBalanceView, AdminLeaveBalancesView, ApplyForLeaveView, EmployeeLeaveRequestsView, AdminLeaveRequestsView, ReporteesLeaveBalanceView, TestResetLeaveBalanceView, ViewLeaveRequestView, UpdateLeaveRequestStatusView, reset_leave_balances
-from .views import CompanyListCreateAPIView, CreateEmployeeView, ApproveRejectLeaveRequest, EmployeeListView, CurrentEmployeeView, ReporteesLeaveRequestsView, ReporteesListView, ProfileView, UserProfileView , UserFileViewSet, EmployeeGetUpdateView, HolidayListView, HolidayDetailView
+from .views import CompanyListCreateAPIView, CreateEmployeeView, ApproveRejectLeaveRequest, EmployeeListView, CurrentEmployeeView, ReporteesLeaveRequestsView, ReporteesListView, ProfileView, UserProfileView , UserFileViewSet, EmployeeGetUpdateView, HolidayListView, HolidayDetailView, EditLeavePolicyView, LeavePolicyTransactionView
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -34,6 +34,7 @@ urlpatterns = [
     path('leave-policies/create/', LeavePolicyCreateView.as_view(), name='create_leave_policy'),
     path('leave-policies/<int:pk>/update/', LeavePolicyUpdateView.as_view(), name='update_leave_policy'),
     path('leave-policies/<int:pk>/delete/', LeavePolicyDeleteView.as_view(), name='delete_leave_policy'),
+    path('leave-policies/<int:pk>/', EditLeavePolicyView.as_view(), name='edit_leave_policy'),
     # Employee Balance Views
     path('employee/leave-balance/', EmployeeLeaveBalanceView.as_view(), name='employee_leave_balance'),
     path('admin/leave-balances/', AdminLeaveBalancesView.as_view(), name='admin_leave_balances'),
@@ -53,6 +54,10 @@ urlpatterns = [
     #Holidays
     path('holidays/', HolidayListView.as_view(), name='holiday_list'),
     path('holidays/<int:pk>/', HolidayDetailView.as_view(), name='holiday_detail'),
+
+    path('leave-policies/transaction/', LeavePolicyTransactionView.as_view(), name="leave_policies_transaction"),
+    path('update_leave_policy/', LeavePolicyTransactionView.as_view(), name='update_leave_policy'),
+    path('delete_leave_policy/', LeavePolicyTransactionView.as_view(), name='delete_leave_policy'),
 
 ]
 

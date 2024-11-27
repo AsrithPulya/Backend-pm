@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import User
+from modules.employee.models import Employee, Company
 from django.contrib.auth.hashers import make_password
 
 class UserSerializer(serializers.ModelSerializer):
@@ -18,3 +19,13 @@ class UserSerializerList(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'reporting_manager', 'first_name', 'last_name']
 
+class UserSerializerUpdate(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = ['id', 'company']
+
+
+class CompanySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Company
+        fields = '__all__'

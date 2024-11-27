@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import User
-from .serializers import UserSerializer, UserSerializerList 
+from .serializers import UserSerializer, UserSerializerList
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework.permissions import AllowAny
@@ -13,6 +13,7 @@ from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.conf import settings
+from modules.employee.models import Employee
 
 class RegisterUser(APIView):
     def post(self, request):
@@ -24,14 +25,42 @@ class RegisterUser(APIView):
             return Response({'user': serializer.data, 'token': str(token)}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+# class LoginUser(APIView):
+#     permission_classes = [AllowAny]  
+#     def post(self, request):       
+#         username = request.data.get('username')
+#         password = request.data.get('password')
+        
+#         user = authenticate(request, username=username, password=password)
+#         if user is not None:
+#             # Generate an access token for the user
+#             access_token = AccessToken.for_user(user)
+#             return Response({
+#                 "message": "Login successful",
+#                 "access_token": str(access_token),
+#                 "username": user.username,
+#                 "role": user.get_role_display(),
+#             }, status=status.HTTP_200_OK)
+#         else:
+#             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
 class LoginUser(APIView):
-    permission_classes = [AllowAny]  
+    permission_classes = [AllowAny]
+
     def post(self, request):       
         username = request.data.get('username')
         password = request.data.get('password')
-        
+
+        # Authenticate the user
         user = authenticate(request, username=username, password=password)
         if user is not None:
+            # Fetch the Employee object linked to this user
+            try:
+                employee = Employee.objects.get(user=user)
+                company = employee.company  # Fetch the related company
+            except Employee.DoesNotExist:
+                return Response({"error": "Employee details not found for the user"}, status=status.HTTP_404_NOT_FOUND)
+
             # Generate an access token for the user
             access_token = AccessToken.for_user(user)
             return Response({
@@ -39,9 +68,11 @@ class LoginUser(APIView):
                 "access_token": str(access_token),
                 "username": user.username,
                 "role": user.get_role_display(),
+                "company": company.id
             }, status=status.HTTP_200_OK)
         else:
             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+  
 
 class ReportingManagerListView(APIView):
     permission_classes = [IsAuthenticated]

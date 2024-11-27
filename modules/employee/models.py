@@ -23,6 +23,11 @@ class Employee(models.Model):
     adhaar_number = models.CharField(max_length=12, unique=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="employee")
 #Education Types
+    
+    def __str__(self):
+        return f"{self.company}"
+
+
 EDUCATION = (
     ('10th class','10TH CLASS'),
     ('12th class', '12TH CLASS'),
@@ -30,7 +35,8 @@ EDUCATION = (
     ('m.tech','M.TECH'),
     ('mca','MCA'),
     ('bca','BCA'),
-)
+    )
+
 #Employee Education
 class EmployeeEducation(models.Model):
     education_type = models.CharField(max_length=20, choices=EDUCATION, default='10th class')
@@ -59,7 +65,7 @@ class UserFile(models.Model):
 #LEAVE MANAGEMENT MODULE
 #Types of Leaves Model
 class LeaveTypeIndex(models.Model):
-    leavename = models.CharField(max_length=50)
+    leavename = models.CharField(max_length=50, unique=True)
     leave_description = models.TextField(max_length=255)
     company = models.ForeignKey(Company, related_name="leave_types", on_delete=models.CASCADE)
 CARRYTYPE = (
@@ -71,7 +77,8 @@ class LeavePolicyTypes(models.Model):
     max_days = models.IntegerField()
     carry_forward_type = models.CharField(max_length=10, choices=CARRYTYPE, default='monthly')
     carry_forward = models.BooleanField(default=False)
-    leave_type = models.ForeignKey(LeaveTypeIndex, related_name="leave_policy_types", on_delete=models.CASCADE)
+    leave_type = models.OneToOneField(LeaveTypeIndex, related_name="leave_policy_types", on_delete=models.CASCADE)
+    carry_forward_days = models.FloatField(default=0)
 LEAVE_STATUS = (
     ('Pending', 'Pending'),
     ('Approved', 'Approved'),
@@ -100,34 +107,7 @@ class EmployeeLeavesRequestsDates(models.Model):
 class Holidays(models.Model):
     holiday_name = models.CharField(max_length=50)
     holiday_date = models.DateField(default=date.today)
-#Model for Employee Leave Balance
-class EmployeeLeavesBalance(models.Model):
-    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
-    leave_type = models.ForeignKey(LeaveTypeIndex, on_delete=models.CASCADE)
-    total_allocated = models.PositiveIntegerField()  
-    remaining_balance = models.FloatField()  
-    used_leaves = models.FloatField()
 
-    @property
-    def used_leaves(self):
-        return self.total_allocated - self.remaining_balance
-
-    def save(self, *args, **kwargs):
-
-        if not self.total_allocated:
-            leave_policy = LeavePolicyTypes.objects.filter(leave_type=self.leave_type).first()
-            self.total_allocated = leave_policy.max_days if leave_policy else 0
-        if self.remaining_balance is None:
-            self.remaining_balance = self.total_allocated  # Initially, all leaves are unused.
-        super().save(*args, **kwargs)
-
-    def update_balance(self, leave_days):
-
-        self.remaining_balance -= leave_days
-        self.save()
-
-    def __str__(self):
-        return f"{self.employee} - {self.leave_type.leavename} Balance"
 
 
 

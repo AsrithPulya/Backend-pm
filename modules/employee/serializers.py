@@ -39,7 +39,7 @@ class LeaveTypeIndexSerializer(serializers.ModelSerializer):
 class LeavePolicyTypesSerializer(serializers.ModelSerializer):
     class Meta:
         model = LeavePolicyTypes
-        fields = ['id', 'max_days', 'carry_forward_type', 'leave_type', 'carry_forward']
+        fields = ['id', 'max_days', 'carry_forward_type', 'leave_type', 'carry_forward', 'carry_forward_days']
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -151,3 +151,16 @@ class HolidaySerializer(serializers.ModelSerializer):
     class Meta:
         model = Holidays
         fields = ['id', 'holiday_name', 'holiday_date']
+
+
+class LeaveTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LeaveTypeIndex
+        fields = '__all__'
+
+class LeavePolicySerializer(serializers.ModelSerializer):
+    leave_type = LeaveTypeSerializer(many = False, read_only = True)
+    class Meta:
+        model = LeavePolicyTypes
+        fields = '__all__'
+
