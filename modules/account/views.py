@@ -3,7 +3,8 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import User
-from .serializers import UserSerializer, UserSerializerList 
+from modules.employee.models import Employee
+from .serializers import UserSerializer, UserSerializerList, UserSerializerUpdate
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework.permissions import AllowAny
@@ -29,7 +30,7 @@ class LoginUser(APIView):
     def post(self, request):       
         username = request.data.get('username')
         password = request.data.get('password')
-        
+        employee = Employee.objects.all()
         user = authenticate(request, username=username, password=password)
         if user is not None:
             # Generate an access token for the user

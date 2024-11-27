@@ -2,7 +2,7 @@ from django.urls import path,include
 from django.http import JsonResponse
 from rest_framework.routers import DefaultRouter
 from .views import EmployeeViewSet, LeaveTypeCreateView, LeaveTypeListView, LeaveTypeUpdateView, LeaveTypeDeleteView, LeavePolicyCreateView, LeavePolicyListView, LeavePolicyUpdateView, LeavePolicyDeleteView, EmployeeLeaveBalanceView, AdminLeaveBalancesView, ApplyForLeaveView, EmployeeLeaveRequestsView, AdminLeaveRequestsView, ReporteesLeaveBalanceView, TestResetLeaveBalanceView, ViewLeaveRequestView, UpdateLeaveRequestStatusView, reset_leave_balances
-from .views import CompanyListCreateAPIView, CreateEmployeeView, ApproveRejectLeaveRequest, EmployeeListView, CurrentEmployeeView, ReporteesLeaveRequestsView, ReporteesListView, ProfileView, UserProfileView , UserFileViewSet, EmployeeGetUpdateView, HolidayListView, HolidayDetailView
+from .views import CompanyListCreateAPIView, CreateEmployeeView, ApproveRejectLeaveRequest, EmployeeListView, CurrentEmployeeView, ReporteesLeaveRequestsView, ReporteesListView, ProfileView, UserProfileView , UserFileViewSet, EmployeeGetUpdateView, HolidayListView, HolidayDetailView, QuarterlyLeaveCalculationView, YearlyLeaveCalculationView
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -53,6 +53,8 @@ urlpatterns = [
     #Holidays
     path('holidays/', HolidayListView.as_view(), name='holiday_list'),
     path('holidays/<int:pk>/', HolidayDetailView.as_view(), name='holiday_detail'),
-
+    path('quarterly-leaves/<int:employee_id>/', QuarterlyLeaveCalculationView.as_view(), name='quarterly_leaves'),
+    # GET /api/yearly-leaves/123/?year=2023
+    path('yearly-leaves/<int:employee_id>/', YearlyLeaveCalculationView.as_view(), name='yearly_leave_calculation'),
 ]
 

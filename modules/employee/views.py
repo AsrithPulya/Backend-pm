@@ -5,7 +5,7 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.contrib import messages
 from datetime import date
-from .models import LeaveTypeIndex, Company, LeavePolicyTypes, EmployeeLeavesRequests, Employee, EmployeeLeavesRequestsDates, Holidays, EmployeeLeavesBalance
+from .models import LeaveTypeIndex, Company, LeavePolicyTypes, EmployeeLeavesRequests, Employee, EmployeeLeavesRequestsDates, Holidays
 from .serializers import LeaveTypeIndexSerializer, LeavePolicyTypesSerializer, EmployeeLeaveRequestSerializer, CompanyMainSerializer, EmployeeSerializer, EmployeeLeavesRequests, ReporteeLeaveBalanceSerializer, HolidaySerializer
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import F, Sum, IntegerField, ExpressionWrapper, DurationField
@@ -17,7 +17,7 @@ from datetime import datetime
 from rest_framework.exceptions import ValidationError
 from django.http import JsonResponse
 from datetime import datetime
-from django.db.models import Sum, F
+from django.db.models import Sum, Case, When, FloatField, Q
 from django.utils import timezone
 from django.core.paginator import Paginator
 from rest_framework.views import APIView
@@ -27,7 +27,7 @@ from rest_framework import permissions, generics
 from django.shortcuts import get_object_or_404
 from django.contrib import messages
 from datetime import date
-from .models import LeaveTypeIndex, Company, LeavePolicyTypes, EmployeeLeavesRequests, Employee, EmployeeLeavesBalance
+from .models import LeaveTypeIndex, Company, LeavePolicyTypes, EmployeeLeavesRequests, Employee
 from .serializers import LeaveTypeIndexSerializer, LeavePolicyTypesSerializer, EmployeeLeaveRequestSerializer, CompanyMainSerializer, EmployeeSerializer, EmployeeLeavesRequests, ProfileSerializer, UserProfileSerializer 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import NotFound
@@ -286,48 +286,34 @@ class EmployeeLeaveBalanceView(APIView):
             employee = request.user.employee
             leave_balances = []
 
-            # Fetch leave types for the employee's company
             leave_types = LeaveTypeIndex.objects.filter(company=employee.company)
-            if not leave_types:
-                return Response({"error": "No leave types found for this company."}, status=status.HTTP_400_BAD_REQUEST)
-
             for leave_type in leave_types:
                 leave_policy = LeavePolicyTypes.objects.filter(leave_type=leave_type).first()
                 max_days = leave_policy.max_days if leave_policy else 0
 
-                # Get leave balance or set to max_days if no record
-                leave_balance = EmployeeLeavesBalance.objects.filter(employee=employee, leave_type=leave_type).first()
-                remaining_balance = leave_balance.remaining_balance if leave_balance else max_days
-
-                # Fetch all approved leave requests for this employee and leave type
+                # Calculate total leaves taken
                 approved_leaves = EmployeeLeavesRequests.objects.filter(
                     employee=employee,
                     leave_type=leave_type,
                     status_of_leave='Approved'
                 )
                 total_taken = sum(
-                    1 if leave_date.leave_day_type == 'Full day' else 0.5
-                    for leave_request in approved_leaves
-                    for leave_date in leave_request.employee_leaves_requests_dates.all()
+                    1 if ld.leave_day_type == 'Full day' else 0.5
+                    for al in approved_leaves
+                    for ld in al.employee_leaves_requests_dates.all()
                 )
-
-
-                # Append the leave balance data
+                remaining_balance = max_days - total_taken
                 leave_balances.append({
                     'leave_type': leave_type.leavename,
                     'total_allocated': max_days,
+                    # 'leave_type_id':leave_type,
                     'total_taken': total_taken,
                     'remaining_balance': remaining_balance,
                 })
 
             return Response(leave_balances, status=status.HTTP_200_OK)
-
         except Exception as e:
-            print(f"Error: {str(e)}")  # Log for debugging
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-
 
 # View for Admin to see all the employee leaves
 class AdminLeaveBalancesView(APIView):
@@ -388,86 +374,46 @@ class ApplyForLeaveView(APIView):
         reason_for_leave = data.get('reason_for_leave')
         leave_days = data.get('leave_days')
 
-        # Validate input data
         if not all([employee_id, leave_type_id, reason_for_leave, leave_days]):
             return Response({"error": "Missing required fields."}, status=status.HTTP_400_BAD_REQUEST)
 
         if not isinstance(leave_days, list) or len(leave_days) == 0:
             return Response({"error": "'leave_days' must be a non-empty list."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Validate models
         try:
             employee = Employee.objects.get(id=employee_id)
-        except Employee.DoesNotExist:
-            return Response({"error": "Invalid employee."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
             leave_type = LeaveTypeIndex.objects.get(id=leave_type_id)
-        except LeaveTypeIndex.DoesNotExist:
-            return Response({"error": "Invalid leave type."}, status=status.HTTP_400_BAD_REQUEST)
+        except (Employee.DoesNotExist, LeaveTypeIndex.DoesNotExist):
+            return Response({"error": "Invalid employee or leave type."}, status=status.HTTP_400_BAD_REQUEST)
 
         leave_policy = LeavePolicyTypes.objects.filter(leave_type=leave_type).first()
-        if not leave_policy:
-            return Response({"error": f"No policy found for leave type '{leave_type.leavename}'."},
-                            status=status.HTTP_400_BAD_REQUEST)
+        max_days = leave_policy.max_days if leave_policy else 0
 
-        max_days = leave_policy.max_days
+        # Calculate total requested leave days
+        total_days_requested = sum(
+            0.5 if day.get('leave_day_type') in ['Half day (1st half)', 'Half day (2nd half)'] else 1
+            for day in leave_days
+        )
 
-        # Calculate total requested leave days and validate business days
-        total_days_requested = 0
-        business_days = []
-        for day in leave_days:
-            leave_date = day.get('date')
-            leave_day_type = day.get('leave_day_type')
+        # Check leave balance
+        approved_leaves = EmployeeLeavesRequests.objects.filter(
+            employee=employee,
+            leave_type=leave_type,
+            status_of_leave='Approved'
+        )
+        total_taken = sum(
+            1 if ld.leave_day_type == 'Full day' else 0.5
+            for al in approved_leaves
+            for ld in al.employee_leaves_requests_dates.all()
+        )
 
-            if not all([leave_date, leave_day_type]):
-                return Response({"error": "Each leave day must have 'date' and 'leave_day_type'."},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            try:
-                leave_date = datetime.strptime(leave_date, '%Y-%m-%d').date()
-            except ValueError:
-                return Response({"error": f"Invalid date format for {leave_date}. Use 'YYYY-MM-DD'."},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            # Check if the date is a weekend
-            if leave_date.weekday() in (5, 6):  # Saturday=5, Sunday=6
-                business_days.append({"date": leave_date, "status": "Weekend"})
-                continue
-
-            if leave_day_type not in dict(LEAVE_DAY_TYPE):
-                return Response({"error": f"Invalid leave day type '{leave_day_type}'."},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            business_days.append({"date": leave_date, "status": leave_day_type})
-            if leave_day_type in ['Half day (1st half)', 'Half day (2nd half)']:
-                total_days_requested += 0.5
-            elif leave_day_type == 'Full day':
-                total_days_requested += 1
-
-            print(f"Processing leave day: {leave_date}, type: {leave_day_type}")
-
-        # Check if total days exceed the max allowed limit
-        existing_leave_days = EmployeeLeavesRequestsDates.objects.filter(
-            employee__employee=employee,
-            date__gte=datetime.now().date()
-        ).count()
-        if total_days_requested + existing_leave_days > max_days:
-            return Response({"error": f"Total leave days ({total_days_requested + existing_leave_days}) exceed the allowed limit of {max_days}."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        # Check if employee has sufficient leave balance
-        try:
-            leave_balance = EmployeeLeavesBalance.objects.get(employee=employee, leave_type=leave_type)
-        except EmployeeLeavesBalance.DoesNotExist:
-            return Response({"error": "Employee leave balance not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        if leave_balance.remaining_balance < total_days_requested:
+        remaining_balance = max_days - total_taken
+        if total_days_requested > remaining_balance:
             return Response({
-                "error": f"Insufficient leave balance. You have {leave_balance.remaining_balance} days left."
+                "error": f"Insufficient leave balance. Remaining balance: {remaining_balance} days."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create leave request and dates
+        # Create leave request
         leave_request = EmployeeLeavesRequests.objects.create(
             employee=employee,
             leave_type=leave_type,
@@ -476,21 +422,15 @@ class ApplyForLeaveView(APIView):
             status_of_leave='Pending'
         )
 
-        for business_day in business_days:
-            if business_day["status"] != "Weekend":  # Only save non-weekend days
+        for day in leave_days:
+            if day['leave_day_type'] != "Weekend":
                 EmployeeLeavesRequestsDates.objects.create(
                     employee=leave_request,
-                    date=business_day["date"],
-                    leave_day_type=business_day["status"]
+                    date=day['date'],
+                    leave_day_type=day['leave_day_type']
                 )
 
-        # Update leave balance
-        leave_balance.remaining_balance -= total_days_requested
-        leave_balance.save()
-
-        return Response({"message": "Leave request submitted successfully.", "leave_request_id": leave_request.id},
-                        status=status.HTTP_201_CREATED)
-
+        return Response({"message": "Leave request submitted successfully."}, status=status.HTTP_201_CREATED)
 
 # View for Employee to see the leave his specifically
 class EmployeeLeaveRequestsView(APIView):
@@ -566,34 +506,48 @@ class ApproveRejectLeaveRequest(APIView):
 
         if action == "approve":
             leave_request.status_of_leave = "Approved"
+
+            # Process leave dates for approved requests
+            leave_days = EmployeeLeavesRequestsDates.objects.filter(employee=leave_request)
+            total_days = 0
+            for leave_day in leave_days:
+                if leave_day.leave_day_type == 'Full day':
+                    total_days += 1
+                elif leave_day.leave_day_type in ['Half day (1st half)', 'Half day (2nd half)']:
+                    total_days += 0.5
+
+            leave_policy = LeavePolicyTypes.objects.filter(leave_type=leave_request.leave_type).first()
+            max_days = leave_policy.max_days if leave_policy else 0
+
+            # Fetch total approved leave days for this employee and leave type
+            approved_leaves = EmployeeLeavesRequests.objects.filter(
+                employee=leave_request.employee,
+                leave_type=leave_request.leave_type,
+                status_of_leave='Approved'
+            )
+
+            # Sum up the total days for all approved leave requests
+            total_taken = 0
+            for al in approved_leaves:
+                # Here, we are fetching the dates related to each approved leave request
+                leave_dates = al.employee_leaves_requests_dates.all()
+                for ld in leave_dates:
+                    if ld.leave_day_type == 'Full day':
+                        total_taken += 1
+                    elif ld.leave_day_type in ['Half day (1st half)', 'Half day (2nd half)']:
+                        total_taken += 0.5
+
+            remaining_balance = max_days - (total_taken + total_days)
+            if remaining_balance < 0:
+                return Response({
+                    "error": "Approving this leave exceeds the employee's leave balance."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
         elif action == "reject":
             leave_request.status_of_leave = "Rejected"
 
         leave_request.save()
-
-        if action == "approve":
-            leave_days = EmployeeLeavesRequestsDates.objects.filter(employee=leave_request.employee)
-            if leave_days.exists():
-                for leave_day in leave_days:
-                    leave_balance, _ = EmployeeLeavesBalance.objects.get_or_create(
-                        employee=leave_request.employee,
-                        leave_type=leave_request.leave_type
-                    )
-
-                    if leave_day.leave_day_type == 'Full day':
-                        leave_balance.used_leaves += 1
-                    elif leave_day.leave_day_type in ['Half day (1st half)', 'Half day (2nd half)']:
-                        leave_balance.used_leaves += 0.5
-
-                    leave_balance.remaining_balance = (
-                        leave_balance.remaining_balance - leave_balance.used_leaves
-                    )
-                    leave_balance.save()
-
-        return Response({
-            "message": f"Leave request {action}d successfully."
-        }, status=status.HTTP_200_OK)
-
+        return Response({"message": f"Leave request {action}d successfully."}, status=status.HTTP_200_OK)
 
 #View for Fetching the Reportees of a User
 class ReporteesListView(APIView):
@@ -624,16 +578,21 @@ class ReporteesLeaveBalanceView(APIView):
                         # Default policy values if the leave policy is not found
                         max_days = 0
 
-                    # Fetch the leave balance for the reportee and leave type
-                    leave_balance = EmployeeLeavesBalance.objects.filter(employee=reportee, leave_type=leave_type).first()
+                    # Calculate total taken days dynamically
+                    approved_leave_requests = EmployeeLeavesRequests.objects.filter(
+                        employee=reportee,
+                        leave_type=leave_type,
+                        status_of_leave='Approved'
+                    )
 
-                    # If no leave balance exists, use the default max_days as remaining balance
-                    if leave_balance:
-                        remaining_balance = leave_balance.remaining_balance
-                        total_taken_days = leave_balance.used_leaves
-                    else:
-                        remaining_balance = max_days
-                        total_taken_days = 0
+                    total_taken_days = sum(
+                        1 if leave_date.leave_day_type == 'Full day' else 0.5
+                        for leave_request in approved_leave_requests
+                        for leave_date in leave_request.employee_leaves_requests_dates.all()
+                    )
+
+                    # Calculate remaining balance dynamically
+                    remaining_balance = max_days - total_taken_days
 
                     # Check if the reportee is on leave today
                     today = timezone.now().date()
@@ -661,7 +620,6 @@ class ReporteesLeaveBalanceView(APIView):
         except Exception as e:
             # Return an error response in case of failure
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
 
 def reset_leave_balances(request):
     today = datetime.now()
@@ -767,7 +725,6 @@ class TestResetLeaveBalanceView(APIView):
             # Handle errors gracefully
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-
 #Holidays Views
 # Get list of all holidays
 class HolidayListView(APIView):
@@ -814,5 +771,134 @@ class HolidayDetailView(APIView):
 
         holiday.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+from datetime import datetime
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from django.db.models import Sum, Case, When, FloatField
+
+class QuarterlyLeaveCalculationView(APIView):
+    def get_quarters(self, year):
+        return {
+            'Q1': (datetime(year, 1, 1), datetime(year, 3, 31)),
+            'Q2': (datetime(year, 4, 1), datetime(year, 6, 30)),
+            'Q3': (datetime(year, 7, 1), datetime(year, 9, 30)),
+            'Q4': (datetime(year, 10, 1), datetime(year, 12, 31)),
+        }
+
+    def get(self, request, *args, **kwargs):
+        year = request.query_params.get('year', datetime.now().year)  # Get year from query params
+        employee_id = kwargs.get('employee_id')
+        
+        if not employee_id:
+            return Response({"error": "Employee ID is required."}, status=400)
+
+        # Fetch leave policies and process as usual
+        leave_types = LeavePolicyTypes.objects.all()
+        if not leave_types.exists():
+            return Response({"error": "No leave policies found."}, status=404)
+
+        quarters = self.get_quarters(int(year))  # Pass the year
+        response_data = []
+
+        for leave_policy in leave_types:
+            leave_type_index = leave_policy.leave_type
+            max_leave_days = leave_policy.max_days * (12 if leave_policy.carry_forward_type == 'monthly' else 4 if leave_policy.carry_forward_type == 'quarterly' else 1)
+            quarterly_data = {'Q1': 0, 'Q2': 0, 'Q3': 0, 'Q4': 0}
+            total_booked_days = 0
+
+            for quarter, (start_date, end_date) in quarters.items():
+                leaves_in_quarter = EmployeeLeavesRequestsDates.objects.filter(
+                    employee__employee__id=employee_id,
+                    employee__leave_type=leave_type_index,
+                    date__gte=start_date,
+                    date__lte=end_date,
+                    employee__status_of_leave__in=['Pending', 'Approved']
+                )
+                leave_days = leaves_in_quarter.aggregate(
+                    total_days=Sum(
+                        Case(
+                            When(leave_day_type='Full day', then=1),
+                            When(leave_day_type__startswith='Half day', then=0.5),
+                            default=0,
+                            output_field=FloatField()
+                        )
+                    )
+                )['total_days'] or 0
+
+                quarterly_data[quarter] = leave_days
+                total_booked_days += leave_days
+
+            response_data.append({
+                "leave_type": leave_type_index.leavename,
+                "quarterly_booked_leaves": quarterly_data,
+                "max_leave_days": max_leave_days,
+                "total_booked_days": total_booked_days,
+                "remaining_leave_days": max_leave_days - total_booked_days
+            })
+
+        return Response(response_data)
+
+
+class YearlyLeaveCalculationView(APIView):
+    def get(self, request, *args, **kwargs):
+        year = request.query_params.get('year', datetime.now().year)  # Default to the current year
+        employee_id = kwargs.get('employee_id')
+
+        if not employee_id:
+            return Response({"error": "Employee ID is required."}, status=400)
+
+        # Fetch leave policies
+        leave_types = LeavePolicyTypes.objects.all()
+        if not leave_types.exists():
+            return Response({"error": "No leave policies found."}, status=400)
+
+        response_data = []
+
+        for leave_policy in leave_types:
+            leave_type_index = leave_policy.leave_type
+            max_leave_days = leave_policy.max_days * (
+                12 if leave_policy.carry_forward_type == 'monthly'
+                else 4 if leave_policy.carry_forward_type == 'quarterly'
+                else 1
+            )
+            total_booked_days = 0
+
+            # Filter leave requests for the year
+            start_date = datetime(int(year), 1, 1)
+            end_date = datetime(int(year), 12, 31)
+            leaves_in_year = EmployeeLeavesRequestsDates.objects.filter(
+                employee__employee__id=employee_id,
+                employee__leave_type=leave_type_index,
+                date__gte=start_date,
+                date__lte=end_date,
+                employee__status_of_leave__in=['Pending', 'Approved']
+            )
+
+            # Calculate leave days
+            leave_days = leaves_in_year.aggregate(
+                total_days=Sum(
+                    Case(
+                        When(leave_day_type='Full day', then=1),
+                        When(leave_day_type__startswith='Half day', then=0.5),
+                        default=0,
+                        output_field=FloatField()
+                    )
+                )
+            )['total_days'] or 0
+
+            total_booked_days += leave_days
+
+            response_data.append({
+                "leave_type": leave_type_index.leavename,
+                "total_booked_days": total_booked_days,
+                "max_leave_days": max_leave_days,
+                "remaining_leave_days": max_leave_days - total_booked_days
+            })
+
+        return Response(response_data)
+
+
+
 
 

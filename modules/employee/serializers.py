@@ -138,7 +138,6 @@ class EmployeeLeaveRequestSerializer(serializers.ModelSerializer):
 
 
 
-
 class ReporteeLeaveBalanceSerializer(serializers.Serializer):
     first_name = serializers.CharField()
     employee = serializers.CharField()
