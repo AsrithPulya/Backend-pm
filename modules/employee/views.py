@@ -17,7 +17,7 @@ from datetime import datetime
 from rest_framework.exceptions import ValidationError
 from django.http import JsonResponse
 from datetime import datetime
-from django.db.models import Sum, F
+from django.db.models import Sum, Case, When, FloatField, Q
 from django.utils import timezone
 from django.core.paginator import Paginator
 from rest_framework.views import APIView
@@ -314,6 +314,7 @@ class EmployeeLeaveBalanceView(APIView):
                 leave_balances.append({
                     'leave_type': leave_type.leavename,
                     'total_allocated': max_days,
+                    # 'leave_type_id':leave_type,
                     'total_taken': total_taken,
                     'remaining_balance': remaining_balance,
                 })
@@ -899,6 +900,135 @@ class EditLeavePolicyView(APIView):
     #         return Response(serializer.data, status=200)
     #     else:
     #         return Response(serializer.errors, status=400)
+
+from datetime import datetime
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from django.db.models import Sum, Case, When, FloatField
+
+class QuarterlyLeaveCalculationView(APIView):
+    def get_quarters(self, year):
+        return {
+            'Q1': (datetime(year, 1, 1), datetime(year, 3, 31)),
+            'Q2': (datetime(year, 4, 1), datetime(year, 6, 30)),
+            'Q3': (datetime(year, 7, 1), datetime(year, 9, 30)),
+            'Q4': (datetime(year, 10, 1), datetime(year, 12, 31)),
+        }
+
+    def get(self, request, *args, **kwargs):
+        year = request.query_params.get('year', datetime.now().year)  # Get year from query params
+        employee_id = kwargs.get('employee_id')
+        
+        if not employee_id:
+            return Response({"error": "Employee ID is required."}, status=400)
+
+        # Fetch leave policies and process as usual
+        leave_types = LeavePolicyTypes.objects.all()
+        if not leave_types.exists():
+            return Response({"error": "No leave policies found."}, status=404)
+
+        quarters = self.get_quarters(int(year))  # Pass the year
+        response_data = []
+
+        for leave_policy in leave_types:
+            leave_type_index = leave_policy.leave_type
+            max_leave_days = leave_policy.max_days * (12 if leave_policy.carry_forward_type == 'monthly' else 4 if leave_policy.carry_forward_type == 'quarterly' else 1)
+            quarterly_data = {'Q1': 0, 'Q2': 0, 'Q3': 0, 'Q4': 0}
+            total_booked_days = 0
+
+            for quarter, (start_date, end_date) in quarters.items():
+                leaves_in_quarter = EmployeeLeavesRequestsDates.objects.filter(
+                    employee__employee__id=employee_id,
+                    employee__leave_type=leave_type_index,
+                    date__gte=start_date,
+                    date__lte=end_date,
+                    employee__status_of_leave__in=['Pending', 'Approved']
+                )
+                leave_days = leaves_in_quarter.aggregate(
+                    total_days=Sum(
+                        Case(
+                            When(leave_day_type='Full day', then=1),
+                            When(leave_day_type__startswith='Half day', then=0.5),
+                            default=0,
+                            output_field=FloatField()
+                        )
+                    )
+                )['total_days'] or 0
+
+                quarterly_data[quarter] = leave_days
+                total_booked_days += leave_days
+
+            response_data.append({
+                "leave_type": leave_type_index.leavename,
+                "quarterly_booked_leaves": quarterly_data,
+                "max_leave_days": max_leave_days,
+                "total_booked_days": total_booked_days,
+                "remaining_leave_days": max_leave_days - total_booked_days
+            })
+
+        return Response(response_data)
+
+
+class YearlyLeaveCalculationView(APIView):
+    def get(self, request, *args, **kwargs):
+        year = request.query_params.get('year', datetime.now().year)  # Default to the current year
+        employee_id = kwargs.get('employee_id')
+
+        if not employee_id:
+            return Response({"error": "Employee ID is required."}, status=400)
+
+        # Fetch leave policies
+        leave_types = LeavePolicyTypes.objects.all()
+        if not leave_types.exists():
+            return Response({"error": "No leave policies found."}, status=400)
+
+        response_data = []
+
+        for leave_policy in leave_types:
+            leave_type_index = leave_policy.leave_type
+            max_leave_days = leave_policy.max_days * (
+                12 if leave_policy.carry_forward_type == 'monthly'
+                else 4 if leave_policy.carry_forward_type == 'quarterly'
+                else 1
+            )
+            total_booked_days = 0
+
+            # Filter leave requests for the year
+            start_date = datetime(int(year), 1, 1)
+            end_date = datetime(int(year), 12, 31)
+            leaves_in_year = EmployeeLeavesRequestsDates.objects.filter(
+                employee__employee__id=employee_id,
+                employee__leave_type=leave_type_index,
+                date__gte=start_date,
+                date__lte=end_date,
+                employee__status_of_leave__in=['Pending', 'Approved']
+            )
+
+            # Calculate leave days
+            leave_days = leaves_in_year.aggregate(
+                total_days=Sum(
+                    Case(
+                        When(leave_day_type='Full day', then=1),
+                        When(leave_day_type__startswith='Half day', then=0.5),
+                        default=0,
+                        output_field=FloatField()
+                    )
+                )
+            )['total_days'] or 0
+
+            total_booked_days += leave_days
+
+            response_data.append({
+                "leave_type": leave_type_index.leavename,
+                "total_booked_days": total_booked_days,
+                "max_leave_days": max_leave_days,
+                "remaining_leave_days": max_leave_days - total_booked_days
+            })
+
+        return Response(response_data)
+
+
+
 
 
 

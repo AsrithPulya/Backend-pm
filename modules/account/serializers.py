@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from .models import User
-from modules.employee.models import Employee, Company
 from django.contrib.auth.hashers import make_password
 
 class UserSerializer(serializers.ModelSerializer):
