@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.contrib import messages
 from datetime import date
 from .models import LeaveTypeIndex, Company, LeavePolicyTypes, EmployeeLeavesRequests, Employee, EmployeeLeavesRequestsDates, Holidays
+from modules.account.models import User
 from .serializers import LeaveTypeIndexSerializer, LeavePolicyTypesSerializer, EmployeeLeaveRequestSerializer, CompanyMainSerializer, EmployeeSerializer, EmployeeLeavesRequests, ReporteeLeaveBalanceSerializer, HolidaySerializer, LeavePolicySerializer, LeaveTypeSerializer
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import F, Sum, IntegerField, ExpressionWrapper, DurationField
@@ -161,8 +162,6 @@ class EmployeeGetUpdateView(APIView):
         try:
              
             employee = Employee.objects.get(pk=pk)
-
-             
             serializer = EmployeeSerializer(employee, data=request.data, partial=True)
 
             if serializer.is_valid():
@@ -302,14 +301,16 @@ class EmployeeLeaveBalanceView(APIView):
                 approved_leaves = EmployeeLeavesRequests.objects.filter(
                     employee=employee,
                     leave_type=leave_type,
-                    status_of_leave='Approved'
+                    # status_of_leave =['Approved']
+                    status_of_leave__in=['Approved', 'Pending']
                 )
                 total_taken = sum(
                     1 if ld.leave_day_type == 'Full day' else 0.5
                     for al in approved_leaves
                     for ld in al.employee_leaves_requests_dates.all()
                 )
-                remaining_balance = max_days - total_taken
+                # remaining_balance = max_days - total_taken
+                remaining_balance = max(max_days - total_taken, 0)
 
                 leave_balances.append({
                     'leave_type': leave_type.leavename,
@@ -407,7 +408,8 @@ class ApplyForLeaveView(APIView):
         approved_leaves = EmployeeLeavesRequests.objects.filter(
             employee=employee,
             leave_type=leave_type,
-            status_of_leave='Approved'
+            # status_of_leave='Approved'
+            status_of_leave__in=['Approved', 'Pending']
         )
         total_taken = sum(
             1 if ld.leave_day_type == 'Full day' else 0.5
@@ -415,7 +417,8 @@ class ApplyForLeaveView(APIView):
             for ld in al.employee_leaves_requests_dates.all()
         )
 
-        remaining_balance = max_days - total_taken
+        # remaining_balance = max_days - total_taken
+        remaining_balance = max(max_days - total_taken, 0)
         if total_days_requested > remaining_balance:
             return Response({
                 "error": f"Insufficient leave balance. Remaining balance: {remaining_balance} days."
@@ -1001,7 +1004,7 @@ class YearlyLeaveCalculationView(APIView):
                 employee__leave_type=leave_type_index,
                 date__gte=start_date,
                 date__lte=end_date,
-                employee__status_of_leave__in=['Pending', 'Approved']
+                employee__status_of_leave__in=['Pending', 'Approved',]
             )
 
             # Calculate leave days
@@ -1028,9 +1031,14 @@ class YearlyLeaveCalculationView(APIView):
         return Response(response_data)
 
 
-
-
-
+def safe_int(value, default=0):
+    """Safely converts a value to integer, returning default if invalid."""
+    if value == '':
+        return default  # Return None or any suitable default if the value is an empty string.
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
 
 class LeavePolicyTransactionView(APIView):
     def post(self, request):
@@ -1038,24 +1046,24 @@ class LeavePolicyTransactionView(APIView):
             # Start the transaction
             with transaction.atomic():  # Ensure atomic transaction
                 data = request.data
-                # print("incoming data", data)
                 company_id = data.get("company")
 
-                max_days = int(data.get("max_days", 0))  # Default to 0 if not provided
-                carry_forward_days = int(data.get("carry_forward_days", 0))  # Default to 0 if not provided
+                # Safely convert max_days and carry_forward_days to integers
+                max_days = safe_int(data.get("max_days", 0))  # Default to 0 if not provided or invalid
+                carry_forward_days = safe_int(data.get("carry_forward_days"), 0)  # Default to 0 if not provided or invalid
 
                 # Validate carry forward type and max days
                 carry_forward_type = data.get("carry_forward_type", "").lower() 
 
-                if(carry_forward_type == 'quarterly') and (max_days > 90):
+                if carry_forward_type == 'quarterly' and max_days > 120:
                     return Response({"error": "Maximum days for quarterly carry forward is 120"}, status=400)
                 
-                if(carry_forward_type == 'monthly') and (max_days > 30):
+                if carry_forward_type == 'monthly' and max_days > 30:
                     return Response({"error": "Maximum days for monthly carry forward is 30"}, status=400)
 
-                if(carry_forward_days > max_days):
+                if carry_forward_days > max_days:
                     return Response({"error": "Carry forward days cannot be greater than maximum days"}, status=400)
- 
+
                 # Step 1: Handle Leave Type Creation or Update
                 leave_type_id = data.get("leave_type_id")
                 leave_type = None
@@ -1070,13 +1078,13 @@ class LeavePolicyTransactionView(APIView):
                     except LeaveTypeIndex.DoesNotExist:
                         return Response({"error": "Leave Type does not exist."}, status=status.HTTP_400_BAD_REQUEST)
                 else:
-                    # Create new leave type manually
+                    # Create new leave type
                     leave_type_data = {
                         "company": company_id,
                         "leavename": data.get("leavename"),
                         "leave_description": data.get("description"),
                     }
-                    # Create the leave type instance manually without using serializer's save()
+                    # Manually create the LeaveTypeIndex instance
                     leave_type = LeaveTypeIndex(
                         company_id=company_id,
                         leavename=leave_type_data["leavename"],
@@ -1097,19 +1105,15 @@ class LeavePolicyTransactionView(APIView):
                     try:
                         leave_policy = LeavePolicyTypes.objects.get(id=leave_policy_id)
                         leave_policy.max_days = data.get("max_days", leave_policy.max_days)
-                        leave_policy.carry_forward_days = data.get(
-                            "carry_forward_days", leave_policy.carry_forward_days
-                        )
-                        leave_policy.carry_forward_type = data.get(
-                            "carry_forward_type", leave_policy.carry_forward_type
-                        )
+                        leave_policy.carry_forward_days = data.get("carry_forward_days", leave_policy.carry_forward_days)
+                        leave_policy.carry_forward_type = data.get("carry_forward_type", leave_policy.carry_forward_type)
                         leave_policy.carry_forward = data.get("carry_forward", leave_policy.carry_forward)
                         leave_policy.leave_type = leave_type  # Set the foreign key
                         leave_policy.save()
                     except LeavePolicyTypes.DoesNotExist:
                         return Response({"error": "Leave Policy does not exist."}, status=status.HTTP_400_BAD_REQUEST)
                 else:
-                    # Create new leave policy manually
+                    # Create new leave policy
                     leave_policy_data = {
                         "leave_type": leave_type.id,  # Pass the leave_type.id explicitly
                         "max_days": data.get("max_days"),
@@ -1144,130 +1148,25 @@ class LeavePolicyTransactionView(APIView):
             # If an error occurs, rollback the transaction and return an error response
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-
-    
-    # @transaction.atomic
-    # def post(self, request):
-        try:
-            data = request.data
-            company_id = data.get("company")
-
-            # Step 1: Handle Leave Type Creation or Update
-            leave_type_id = data.get("leave_type_id")
-            leave_type = None
-
-            if leave_type_id:
-                # Update existing leave type
-                try:
-                    leave_type = LeaveTypeIndex.objects.get(id=leave_type_id)
-                    leave_type.leavename = data.get("leavename", leave_type.leavename)
-                    leave_type.leave_description = data.get("description", leave_type.leave_description)
-                    leave_type.save()
-                except LeaveTypeIndex.DoesNotExist:
-                    return Response({"error": "Leave Type does not exist."}, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                # Create new leave type
-                leave_type_data = {
-                    "company": company_id,
-                    "leavename": data.get("leavename"),
-                    "leave_description": data.get("description"),
-                }
-                leave_type_serializer = LeaveTypeSerializer(data=leave_type_data)
-                if not leave_type_serializer.is_valid():
-                    return Response(
-                        {"error": leave_type_serializer.errors},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                # Manually create the LeaveTypeIndex instance
-                leave_type = LeaveTypeIndex.objects.create(
-                    company_id=company_id,
-                    leavename=leave_type_serializer.validated_data["leavename"],
-                    leave_description=leave_type_serializer.validated_data["leave_description"],
-                )
-
-            # Ensure leave_type.id is available
-            if not leave_type or not leave_type.id:
-                raise ValueError("Leave Type creation failed. 'leave_type.id' is missing.")
-
-            # Step 2: Handle Leave Policy Creation or Update
-            leave_policy_id = data.get("leave_policy_id")
-            leave_policy = None
-
-            if leave_policy_id:
-                # Update existing leave policy
-                try:
-                    leave_policy = LeavePolicyTypes.objects.get(id=leave_policy_id)
-                    leave_policy.max_days = data.get("max_days", leave_policy.max_days)
-                    leave_policy.carry_forward_days = data.get(
-                        "carry_forward_days", leave_policy.carry_forward_days
-                    )
-                    leave_policy.carry_forward_type = data.get(
-                        "carry_forward_type", leave_policy.carry_forward_type
-                    )
-                    leave_policy.carry_forward = data.get("carry_forward", leave_policy.carry_forward)
-                    leave_policy.leave_type = leave_type  # Set the foreign key
-                    leave_policy.save()
-                except LeavePolicyTypes.DoesNotExist:
-                    return Response({"error": "Leave Policy does not exist."}, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                # Create new leave policy
-                leave_policy_data = {
-                    "leave_type": leave_type.id,  # Pass the leave_type.id explicitly
-                    "max_days": data.get("max_days"),
-                    "carry_forward_days": data.get("carry_forward_days"),
-                    "carry_forward_type": data.get("carry_forward_type"),
-                    "carry_forward": data.get("carry_forward"),
-                }
-                leave_policy_serializer = LeavePolicySerializer(data=leave_policy_data)
-                if not leave_policy_serializer.is_valid():
-                    return Response(
-                        {"error": leave_policy_serializer.errors},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                # Manually create the LeavePolicyTypes instance
-                leave_policy = LeavePolicyTypes.objects.create(
-                    leave_type=leave_type,
-                    max_days=leave_policy_serializer.validated_data["max_days"],
-                    carry_forward_days=leave_policy_serializer.validated_data["carry_forward_days"],
-                    carry_forward_type=leave_policy_serializer.validated_data["carry_forward_type"],
-                    carry_forward=leave_policy_serializer.validated_data["carry_forward"],
-                )
-
-            # Return a success response with serialized data
-            return Response(
-                {
-                    "leave_type": LeaveTypeSerializer(leave_type).data,
-                    "leave_policy": LeavePolicySerializer(leave_policy).data,
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        except Exception as e:
-            transaction.set_rollback(True)  # Rollback transaction on error
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    
-
     @transaction.atomic
     def put(self, request):
         """ Handle update for existing Leave Type or Leave Policy """
         try:
             data = request.data
-            print("updating data", data)
-            max_days = int(data.get("max_days", 0))  # Default to 0 if not provided
-            carry_forward_days = int(data.get("carry_forward_days", 0))  # Default to 0 if not provided
+            # Safely convert max_days and carry_forward_days to integers
+            max_days = safe_int(data.get("max_days", 0))  # Default to 0 if not provided or invalid
+            carry_forward_days = safe_int(data.get("carry_forward_days", 0))  # Default to 0 if not provided or invalid
 
             # Validate carry forward type and max days
             carry_forward_type = data.get("carry_forward_type", "").lower() 
-            if(carry_forward_type == 'quarterly') and (max_days > 90):
+            if carry_forward_type == 'quarterly' and max_days > 120:
                 return Response({"error": "Maximum days for quarterly carry forward is 120"}, status=400)
             
-            if(carry_forward_type == 'monthly') and (max_days > 30):
+            if carry_forward_type == 'monthly' and max_days > 30:
                 return Response({"error": "Maximum days for monthly carry forward is 30"}, status=400)
 
-            if(carry_forward_days > max_days):
+            if carry_forward_days > max_days:
                 return Response({"error": "Carry forward days cannot be greater than maximum days"}, status=400)
-
-
 
             leave_policy_id = data.get("leave_policy_id")
             leave_policy = get_object_or_404(LeavePolicyTypes, id=leave_policy_id)
@@ -1277,7 +1176,6 @@ class LeavePolicyTransactionView(APIView):
             leave_policy.carry_forward_days = data.get("carry_forward_days", leave_policy.carry_forward_days)
             leave_policy.carry_forward_type = data.get("carry_forward_type", leave_policy.carry_forward_type)
             leave_policy.carry_forward = data.get("carry_forward", leave_policy.carry_forward)
-
 
             # Update related Leave Type
             leave_type_data = {
@@ -1300,9 +1198,7 @@ class LeavePolicyTransactionView(APIView):
         except Exception as e:
             transaction.set_rollback(True)  # Rollback if anything goes wrong
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-    
-    @transaction.atomic
+
     def delete(self, request):
         """ Handle deletion of LeaveTypeIndex and LeavePolicyTypes """
         try:
@@ -1348,3 +1244,51 @@ class LeavePolicyTransactionView(APIView):
             transaction.set_rollback(True)
             print(f"Error during delete operation: {e}")  # Log error for debugging
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+from datetime import timedelta
+from django.db.models import ExpressionWrapper, F, DurationField
+from django.utils.timezone import now
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+
+from .models import User
+
+class NewHireView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        today = now()  # Current datetime
+        
+        # Calculate the days since date_joined for all users
+        users = User.objects.annotate(
+            days_since_joining=ExpressionWrapper(
+                today - F('date_joined'), output_field=DurationField()
+            )
+        ).values(
+            'id', 'username', 'email', 'date_joined', 'role', 'days_since_joining'
+        )
+
+        # Filter users who joined this month
+        users_this_month = users.filter(
+            date_joined__year=today.year,
+            date_joined__month=today.month
+        )
+
+        # Group results by roles
+        roles = {role[0]: role[1] for role in User.ROLE_CHOICES}
+        all_users = {}
+        new_hires_this_month = {}
+
+        for role_id, role_name in roles.items():
+            all_users[role_name] = list(users.filter(role=role_id))
+            new_hires_this_month[role_name] = list(users_this_month.filter(role=role_id))
+
+        # Format response
+        response = {
+            "all_users": all_users,
+            "new_hires_this_month": new_hires_this_month
+        }
+        return Response(response)
+

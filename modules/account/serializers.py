@@ -16,15 +16,6 @@ class UserSerializer(serializers.ModelSerializer):
 class UserSerializerList(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'reporting_manager', 'first_name', 'last_name']
+        fields = ['id', 'username', 'reporting_manager', 'first_name', 'last_name', 'date_joined', 'email', 'role']
+    
 
-class UserSerializerUpdate(serializers.ModelSerializer):
-    class Meta:
-        model = Employee
-        fields = ['id', 'company']
-
-
-class CompanySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Company
-        fields = '__all__'

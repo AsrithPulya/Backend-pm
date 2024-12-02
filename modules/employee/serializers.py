@@ -77,18 +77,17 @@ class UserFileSerializer(serializers.ModelSerializer):
 
 class UserProfileSerializer(serializers.ModelSerializer):
     Emp_id = serializers.CharField(source='emp_code', read_only=True)
-    Name = serializers.SerializerMethodField()
+    first_name = serializers.CharField()
+    last_name = serializers.CharField()
     date_joined = serializers.SerializerMethodField()
     Role = serializers.SerializerMethodField()
     FatherName = serializers.CharField(source='father_name')
     MotherName = serializers.CharField(source='mother_name')
     PersonalMobileNumber = serializers.CharField(source='phone_number')
     user = serializers.SerializerMethodField()
-
-
     class Meta:
         model = Employee
-        fields = ['id', 'Emp_id', 'Name', 'date_joined', 'Role', 'FatherName', 'MotherName', 'PersonalMobileNumber', 'user']
+        fields = ['id', 'Emp_id', 'date_joined','first_name', 'last_name', 'Role', 'FatherName', 'MotherName', 'PersonalMobileNumber', 'user' , 'date_of_birth']
 
     def get_Name(self, obj):
         return f"{obj.user.first_name} {obj.user.last_name}" if obj.user else None
@@ -97,7 +96,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return obj.user.date_joined if obj.user else None
 
     def get_Role(self, obj):
-        return obj.user.role if hasattr(obj.user, 'role') else None
+        return obj.user.get_role_display() if hasattr(obj.user, 'role') else None
     def get_user(self, obj):
         return obj.user.id
 class EmployeeLeaveRequestDateSerializer(serializers.ModelSerializer):

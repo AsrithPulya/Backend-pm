@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import RegisterUser, LoginUser, ReportingManagerListView, UserDetailView, ForgotPasswordView, ResetPasswordView
-
+from .views import RegisterUser, LoginUser, ReportingManagerListView, UserDetailView, ForgotPasswordView, ResetPasswordView, UserView
+from .views import NewHiresView
 urlpatterns = [
     path('register/', RegisterUser.as_view(), name='registeruser'),
     path('login/', LoginUser.as_view(), name='loginuser'),
@@ -9,4 +9,7 @@ urlpatterns = [
     # Api for reset password and forgot password
     path('forgot-password/', ForgotPasswordView.as_view(), name='forgot_password'),
     path('reset-password/', ResetPasswordView.as_view(), name='reset_password'),
+    path('users/all/', UserView.as_view(), name='all_users'),
+    path('new-hires/', NewHiresView.as_view(), name='new-hires'),
+
 ]
