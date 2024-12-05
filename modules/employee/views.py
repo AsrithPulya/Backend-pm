@@ -44,6 +44,8 @@ from rest_framework import viewsets, permissions
 from rest_framework.parsers import MultiPartParser, FormParser
 from .models import UserFile
 from .serializers import UserFileSerializer
+from modules.account.permssions import IsAdmin, IsEmployee, IsAdminOrManager, IsManager
+from rest_framework.decorators import permission_classes
 
 class CompanyListCreateAPIView(APIView):
     def get(self, request):
@@ -51,6 +53,7 @@ class CompanyListCreateAPIView(APIView):
         serializer = CompanyMainSerializer(companies, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
+    permission_classes = [IsAdmin]
     def post(self, request):
         serializer = CompanyMainSerializer(data=request.data)
         if serializer.is_valid():
@@ -66,7 +69,6 @@ class CreateEmployeeView(APIView):
             # Save the employee data if valid
             serializer.save()
             return Response({'message': 'Employee created successfully.', 'data': serializer.data}, status=status.HTTP_201_CREATED)
-        
         # Return validation errors if the data is invalid
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 class EmployeeListView(APIView):
@@ -82,7 +84,6 @@ class CurrentEmployeeView(APIView):
         serializer = EmployeeSerializer(employee)
         return Response(serializer.data)
 class EmployeeViewSet(viewsets.ViewSet):
-   
     def list(self, request):
         employees = Employee.objects.all()
         serializer = EmployeeSerializer(employees, many=True)
@@ -114,6 +115,7 @@ class EmployeeViewSet(viewsets.ViewSet):
         employee = get_object_or_404(Employee, pk=pk)
         employee.delete()
         return Response(status=204)
+    
 class UserFileViewSet(viewsets.ModelViewSet):
     queryset = UserFile.objects.all()
     serializer_class = UserFileSerializer
@@ -326,6 +328,7 @@ class EmployeeLeaveBalanceView(APIView):
 
 # View for Admin to see all the employee leaves
 class AdminLeaveBalancesView(APIView):
+    permission_classes = [IsAdmin] # Only admin can access this view - working
     def get(self, request):
         leave_balances = []
         employees = Employee.objects.all()
@@ -457,8 +460,7 @@ class ReporteesLeaveRequestsPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 100
 class ReporteesLeaveRequestsView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsAdminOrManager] #working
     def get(self, request):
         # Fetch reportees' leave requests
         reportees = request.user.reportees.all()  
@@ -478,18 +480,24 @@ class ReporteesLeaveRequestsView(APIView):
 
 # View for Admin to see the leaves of employees specifically
 class AdminLeaveRequestsView(APIView):
+    permission_classes = [IsAdmin] #working
+    
     def get(self, request):
         leave_requests = EmployeeLeavesRequests.objects.all()
         serializer = EmployeeLeaveRequestSerializer(leave_requests, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
 # Admin views for all the Leave requests (ACCEPT/REJECT)
 class ViewLeaveRequestView(APIView):
+    permission_classes = [IsAdmin] #working
     def get(self, request, pk):
         leave_request = get_object_or_404(EmployeeLeavesRequests, pk=pk)
         serializer = EmployeeLeaveRequestSerializer(leave_request)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
 # Admin can update the Leave requests update(ACCEPT/REJECT)
 class UpdateLeaveRequestStatusView(APIView):
+    permission_classes = [IsAdmin] #working
     def put(self, request, pk):
         leave_request = get_object_or_404(EmployeeLeavesRequests, pk=pk)
         new_status = request.data.get('status_of_leave')
@@ -499,7 +507,7 @@ class UpdateLeaveRequestStatusView(APIView):
 
 #View for Reporting Manager to Apply or Reject Leaves
 class ApproveRejectLeaveRequest(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManager] #working
 
     def post(self, request, leave_id):
         action = request.data.get("action")
@@ -562,14 +570,16 @@ class ApproveRejectLeaveRequest(APIView):
 
 #View for Fetching the Reportees of a User
 class ReporteesListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManager] #working
     def get(self, request):
         reporting_manager = request.user
         reportees = Employee.objects.filter(user__reporting_manager=reporting_manager)
         serializer = EmployeeSerializer(reportees, many=True)
         return Response(serializer.data)
+    
 #Reportees Leave Balance View
 class ReporteesLeaveBalanceView(APIView):
+    permission_classes = [IsAdminOrManager] #working
     def get(self, request):
         try:
             leave_balances = []
@@ -739,11 +749,13 @@ class TestResetLeaveBalanceView(APIView):
 #Holidays Views
 # Get list of all holidays
 class HolidayListView(APIView):
+    # permission_classes = [IsAuthenticated]
     def get(self, request):
         holidays = Holidays.objects.all()
         serializer = HolidaySerializer(holidays, many=True)
         return Response(serializer.data)
 
+    # permission_classes = [IsAdminOrManager]
     def post(self, request):
         serializer = HolidaySerializer(data=request.data)
         if serializer.is_valid():
@@ -762,6 +774,7 @@ class HolidayDetailView(APIView):
         serializer = HolidaySerializer(holiday)
         return Response(serializer.data)
 
+    # permission_classes = [IsAdminOrManager]
     def put(self, request, pk):
         try:
             holiday = Holidays.objects.get(pk=pk)
@@ -774,6 +787,7 @@ class HolidayDetailView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    permission_classes = [IsAdminOrManager]
     def delete(self, request, pk):
         try:
             holiday = Holidays.objects.get(pk=pk)
@@ -849,29 +863,29 @@ class EditLeavePolicyView(APIView):
         return Response(serializer.data, status=200)
 
     # def put(self, request, pk):
-        try:
-            leave_policy = LeavePolicyTypes.objects.get(pk=pk)
-        except LeavePolicyTypes.DoesNotExist:
-            raise NotFound("Leave policy not found.")
+    #     try:
+    #         leave_policy = LeavePolicyTypes.objects.get(pk=pk)
+    #     except LeavePolicyTypes.DoesNotExist:
+    #         raise NotFound("Leave policy not found.")
 
-        # Deserialize the incoming data
-        serializer = LeavePolicySerializer(leave_policy, data=request.data)
+    #     # Deserialize the incoming data
+    #     serializer = LeavePolicySerializer(leave_policy, data=request.data)
 
-        if serializer.is_valid():
-            # Update the LeavePolicyTypes data
-            updated_leave_policy = serializer.save()
+    #     if serializer.is_valid():
+    #         # Update the LeavePolicyTypes data
+    #         updated_leave_policy = serializer.save()
 
-            # Update the related LeaveTypeIndex data if necessary
-            leave_type_data = request.data.get('leave_type')
-            if leave_type_data:
-                leave_type = LeaveTypeIndex.objects.get(pk=leave_type_data.get('id'))
-                leave_type_serializer = LeaveTypeSerializer(leave_type, data=leave_type_data)
-                if leave_type_serializer.is_valid():
-                    leave_type_serializer.save()
+    #         # Update the related LeaveTypeIndex data if necessary
+    #         leave_type_data = request.data.get('leave_type')
+    #         if leave_type_data:
+    #             leave_type = LeaveTypeIndex.objects.get(pk=leave_type_data.get('id'))
+    #             leave_type_serializer = LeaveTypeSerializer(leave_type, data=leave_type_data)
+    #             if leave_type_serializer.is_valid():
+    #                 leave_type_serializer.save()
 
-            return Response(serializer.data, status=200)
-        else:
-            return Response(serializer.errors, status=400)
+    #         return Response(serializer.data, status=200)
+    #     else:
+    #         return Response(serializer.errors, status=400)
     
     # def put(self, request, pk):
     #     try:
@@ -1040,6 +1054,7 @@ def safe_int(value, default=0):
     except (ValueError, TypeError):
         return default
 
+@permission_classes([IsAdmin])
 class LeavePolicyTransactionView(APIView):
     def post(self, request):
         try:
@@ -1252,7 +1267,6 @@ from django.utils.timezone import now
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-
 from .models import User
 
 class NewHireView(APIView):

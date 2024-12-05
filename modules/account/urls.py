@@ -12,4 +12,6 @@ urlpatterns = [
     path('users/all/', UserView.as_view(), name='all_users'),
     path('new-hires/', NewHiresView.as_view(), name='new-hires'),
 
+    path('users/update_role/', UserView.as_view(), name='update_role'), #testing for updating role
+
 ]

@@ -25,6 +25,7 @@ from django.db import transaction
 from faker import Faker
 from django.core.exceptions import ValidationError
 import datetime
+from .permssions import IsAdmin, IsManager, IsEmployee, IsAdminOrManager
 
 fake = Faker()
 
@@ -52,23 +53,23 @@ class RegisterUser(APIView):
 
                     first_name = request.data.get('first_name')
                     last_name = request.data.get('last_name')
-                    date_of_birth = self.generate_random_date_of_birth()
-                    father_name = fake.name()
-                    mother_name = fake.name()
-                    phone_number = self.generate_random_phone_number()
-                    adhaar_number = self.generate_random_adhaar_number()
+                    # date_of_birth = self.generate_random_date_of_birth()
+                    # father_name = fake.name()
+                    # mother_name = fake.name()
+                    # phone_number = self.generate_random_phone_number()
+                    # adhaar_number = self.generate_random_adhaar_number()
                     # Create the Employee record
                     Employee.objects.create(
                         user=user,
                         company_id=company_id,
-                        emp_code=emp_code, 
-                        first_name = first_name,
-                        last_name = last_name,
-                        date_of_birth=date_of_birth,
-                        father_name=father_name,
-                        mother_name=mother_name,
-                        phone_number=phone_number,
-                        adhaar_number=adhaar_number
+                        emp_code=emp_code,
+                        first_name=request.data.get('first_name', ""),
+                        last_name=request.data.get('last_name', ""),
+                        date_of_birth=request.data.get('date_of_birth'),
+                        father_name=request.data.get('father_name', ""),
+                        mother_name=request.data.get('mother_name', ""),
+                        phone_number=request.data.get('phone_number', ""),
+                        adhaar_number=request.data.get('adhaar_number', "")
                     )
                     
                     # Generate token for the new user
@@ -127,11 +128,10 @@ class RegisterUser(APIView):
 
 
 class UserView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdmin]
     def get(self, request):
         
         users = User.objects.select_related('reporting_manager').all()  # Fetch users and their managers efficiently
-        
         # Custom logic for including manager names in the serialized response
         user_data = [
             {
@@ -139,11 +139,41 @@ class UserView(APIView):
                 'email': user.email,
                 'role': user.get_role_display(),
                 'manager_name': user.reporting_manager.get_full_name() if user.reporting_manager else None,
+                'user_id': user.id,
             }
             for user in users
         ]
         
         return Response(user_data)
+
+
+    def put(self, request):
+        try:
+            # Fetch the user to update by user_id
+            user_id = request.data.get('user_id')
+            user = User.objects.get(id=user_id)
+
+            # Check if 'role' is provided in the request data
+            new_role = request.data.get('newRole')
+            if not new_role:
+                return Response({"error": "Role not provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Update the user's role
+            user.role = new_role
+            user.save()
+
+            return Response({
+                "message": "Role updated successfully",
+                "user": {
+                    'name': user.get_full_name() or user.username,
+                    'email': user.email,
+                    'role': user.get_role_display(),
+                    'manager_name': user.reporting_manager.get_full_name() if user.reporting_manager else None,
+                }
+            }, status=status.HTTP_200_OK)
+        
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
         
 
 class LoginUser(APIView):
@@ -195,14 +225,14 @@ class LoginUser(APIView):
   
 
 class ReportingManagerListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManager]
     def get(self, request):
         reporting_managers = User.objects.filter(role=3)  
         serializer = UserSerializerList(reporting_managers, many=True)
         return Response(serializer.data)
 
 class UserDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
     def get(self, request, user_id, *args, **kwargs):
         try:
             user = User.objects.get(id=user_id)
@@ -358,93 +388,51 @@ class ResetPasswordView(APIView):
         return Response({"message": "Password reset successful."}, status=status.HTTP_200_OK)
     
 class NewHiresView(APIView):
-    permission_classes = [IsAuthenticated]
-
+    permission_classes = [IsAdmin]
     def get(self, request):
-        # Fetch the filter type from the query parameters
-        filter_type = request.query_params.get('filter_type', 'last_7_days')  # Default to 'last_7_days'
-        today = timezone.now().date()  # Only use the date part
-        filter_date = None
-
-        # Define the time ranges for different filters
-        if filter_type == 'last_7_days':
-            filter_date = today - timedelta(days=7)
-        elif filter_type == 'last_month':
-            filter_date = today - timedelta(days=30)
-        elif filter_type == 'last_year':
-            filter_date = today - timedelta(days=365)
-        elif filter_type == 'ALL':
-            filter_date = None  # No filtering required
-        else:
-            # Handle invalid filter types
-            return Response({"detail": "Invalid filter type"}, status=400)
-
-        # Apply filtering based on filter_date or fetch all
-        if filter_date is not None:
-            new_hires = User.objects.annotate(join_date=TruncDate('date_joined')).filter(join_date__gte=filter_date)
-        else:
-            new_hires = User.objects.all()  # Fetch all users
-
-        # Serialize the filtered users
-        response_data = [
-            {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "date_joined": user.date_joined.date(),  # Include only the date part
-                "reporting_manager": user.reporting_manager.id if user.reporting_manager else None,
-                "role": user.role.name if hasattr(user.role, 'name') else user.get_role_display()
-            }
-            for user in new_hires
-        ]
-
-        return Response(response_data, status=status.HTTP_200_OK)
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        # Fetch the filter type from the query parameters
-        filter_type = request.query_params.get('filter_type', 'last_7_days')  # Default to 'last_7_days'
-        print("filter type",filter_type)
-        today = timezone.now().date()
-        print("today", today)
-        filter_date = None
-
-        # Define the time ranges for different filters
-        if filter_type == 'last_7_days':
-            filter_date = today - timedelta(days=7)
-        elif filter_type == 'last_month':
-            filter_date = today - timedelta(days=30)
-        elif filter_type == 'last_year':
-            filter_date = today - timedelta(days=365)
-        # elif filter_type == 'previous_years':
-        #     filter_date = today.replace(year=today.year - 1)
-        elif filter_type == 'ALL':
+        try:
+            # Fetch the filter type from the query parameters
+            filter_type = request.query_params.get('filter_type', 'last_7_days')  # Default to 'last_7_days'
+            print("filter type",filter_type)
+            today = timezone.now().date()
+            print("today", today)
             filter_date = None
-        else:
-            return Response({"detail": f"Invalid filter type: {filter_type}"}, status=400)
+
+            # Define the time ranges for different filters
+            if filter_type == 'last_7_days':
+                filter_date = today - timedelta(days=7)
+            elif filter_type == 'last_month':
+                filter_date = today - timedelta(days=30)
+            elif filter_type == 'last_year':
+                filter_date = today - timedelta(days=365)
+            elif filter_type == 'ALL':
+                filter_date = None
+            else:
+                return Response({"error": f"Invalid filter type: {filter_type}"}, status=status.HTTP_400_BAD_REQUEST)
 
 
-        # Filter users based on the filter date
-        if filter_date is not None:
-            new_hires = User.objects.annotate(join_date=TruncDate('date_joined')).filter(join_date__gte=filter_date)
-        else:
-            new_hires = User.objects.all()  # Fetch all users
+            # Filter users based on the filter date
+            if filter_date is not None:
+                new_hires = User.objects.annotate(join_date=TruncDate('date_joined')).filter(join_date__gte=filter_date)
+            else:
+                new_hires = User.objects.all()  # Fetch all users
 
-        # Serialize the filtered users
-        response_data = []
-        for user in new_hires:
-            response_data.append({
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "date_joined": user.date_joined,
-                "reporting_manager": user.reporting_manager.username if user.reporting_manager else None,
-                "role": user.role.name if hasattr(user.role, 'name') else user.get_role_display()  # Adjust based on role type
-            })
+            # Serialize the filtered users
+            response_data = []
+            for user in new_hires:
+                response_data.append({
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "date_joined": user.date_joined,
+                    "reporting_manager": user.reporting_manager.username if user.reporting_manager else None,
+                    "role": user.role.name if hasattr(user.role, 'name') else user.get_role_display()  # Adjust based on role type
+                })
 
-        return Response(response_data, status=status.HTTP_200_OK)
+            return Response(response_data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+

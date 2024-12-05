@@ -16,13 +16,13 @@ class Company(models.Model):
 class Employee(models.Model):
     company = models.ForeignKey(Company, related_name="employee_company", on_delete=models.CASCADE)
     emp_code = models.CharField(max_length=8) 
-    first_name = models.CharField(max_length=50, null=True)
-    last_name = models.CharField(max_length=50, null=True)
-    date_of_birth = models.DateField()
-    father_name = models.CharField(max_length=50)
-    mother_name = models.CharField(max_length=50)
-    phone_number = models.CharField(max_length=10) 
-    adhaar_number = models.CharField(max_length=12, unique=True,)
+    first_name = models.CharField(max_length=50, null=True, blank=True)
+    last_name = models.CharField(max_length=50, null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    father_name = models.CharField(max_length=50, null=True, blank=True)
+    mother_name = models.CharField(max_length=50, null=True, blank=True)
+    phone_number = models.CharField(max_length=10, null=True, blank=True) 
+    adhaar_number = models.CharField(max_length=12, unique=True, blank=True, null=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="employee")
 #Education Types
     def __str__(self):

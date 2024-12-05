@@ -81,9 +81,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
     last_name = serializers.CharField()
     date_joined = serializers.SerializerMethodField()
     Role = serializers.SerializerMethodField()
-    FatherName = serializers.CharField(source='father_name')
-    MotherName = serializers.CharField(source='mother_name')
-    PersonalMobileNumber = serializers.CharField(source='phone_number')
+    FatherName = serializers.CharField(source='father_name', required = False, allow_blank = True)
+    MotherName = serializers.CharField(source='mother_name', required = False, allow_blank = True)
+    PersonalMobileNumber = serializers.CharField(source='phone_number', required = False)
     user = serializers.SerializerMethodField()
     class Meta:
         model = Employee
