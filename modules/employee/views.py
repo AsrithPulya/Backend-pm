@@ -5,6 +5,7 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.contrib import messages
 from datetime import date
+from .models import *
 from .models import LeaveTypeIndex, Company, LeavePolicyTypes, EmployeeLeavesRequests, Employee, EmployeeLeavesRequestsDates, Holidays
 from modules.account.models import User
 from .serializers import LeaveTypeIndexSerializer, LeavePolicyTypesSerializer, EmployeeLeaveRequestSerializer, CompanyMainSerializer, EmployeeSerializer, EmployeeLeavesRequests, ReporteeLeaveBalanceSerializer, HolidaySerializer, LeavePolicySerializer, LeaveTypeSerializer
@@ -29,6 +30,7 @@ from django.shortcuts import get_object_or_404
 from django.contrib import messages
 from datetime import date
 from .models import LeaveTypeIndex, Company, LeavePolicyTypes, EmployeeLeavesRequests, Employee
+from .serializers import *
 from .serializers import LeaveTypeIndexSerializer, LeavePolicyTypesSerializer, EmployeeLeaveRequestSerializer, CompanyMainSerializer, EmployeeSerializer, EmployeeLeavesRequests, ProfileSerializer, UserProfileSerializer 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import NotFound
@@ -453,6 +455,13 @@ class EmployeeLeaveRequestsView(APIView):
         serializer = EmployeeLeaveRequestSerializer(leave_requests, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    def delete(self, request, pk=None):
+        if pk is None:
+            return Response({"error": "Leave request ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        leave_request = get_object_or_404(EmployeeLeavesRequests, pk=pk, employee=request.user.employee)
+        leave_request.delete()
+        return Response({"message": "Leave request cancelled successfully."}, status=status.HTTP_204_NO_CONTENT)
 #Reportees Leave Requests View
 from rest_framework.pagination import PageNumberPagination
 class ReporteesLeaveRequestsPagination(PageNumberPagination):
@@ -1305,4 +1314,20 @@ class NewHireView(APIView):
             "new_hires_this_month": new_hires_this_month
         }
         return Response(response)
+
+class EmployeeEducationListCreateView(APIView):
+    """
+    View to list all employee educations or create a new one.
+    """
+    def get(self, request):
+        educations = EmployeeEducation.objects.all()
+        serializer = EmployeeEducationSerializer(educations, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = EmployeeEducationSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

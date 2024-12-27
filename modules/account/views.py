@@ -224,10 +224,14 @@ class LoginUser(APIView):
 #             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
   
 
+from django.db.models import Q  # Import Q for complex queries
+
 class ReportingManagerListView(APIView):
     permission_classes = [IsAdminOrManager]
+    
     def get(self, request):
-        reporting_managers = User.objects.filter(role=3)  
+        # Use Q to combine conditions with OR
+        reporting_managers = User.objects.filter(Q(role=3) | Q(role=1))  
         serializer = UserSerializerList(reporting_managers, many=True)
         return Response(serializer.data)
 

@@ -1,14 +1,5 @@
 from rest_framework import serializers
-from .models import (
-    LeaveTypeIndex,
-    Company,
-    LeavePolicyTypes,
-    EmployeeLeavesRequests,
-    Employee,
-    EmployeeLeavesRequestsDates,
-    UserFile,
-    Holidays,
-)
+from .models import *
 
 class CompanyMainSerializer(serializers.ModelSerializer):
     class Meta:
@@ -21,7 +12,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Employee
-        fields = ['id', 'company', 'emp_code', 'date_of_birth', 'father_name', 'mother_name', 'phone_number', 'adhaar_number', 'user', 'Name']
+        fields = '__all__'
         read_only_fields = ["emp_code"]
 
     def get_Name(self, obj):
@@ -75,6 +66,11 @@ class UserFileSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'file', 'file_name', 'uploaded_at']
         read_only_fields = ['user']
 
+class EmployeeEducationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmployeeEducation
+        fields = '__all__'
+
 class UserProfileSerializer(serializers.ModelSerializer):
     Emp_id = serializers.CharField(source='emp_code', read_only=True)
     first_name = serializers.CharField()
@@ -87,7 +83,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
     class Meta:
         model = Employee
-        fields = ['id', 'Emp_id', 'date_joined','first_name', 'last_name', 'Role', 'FatherName', 'MotherName', 'PersonalMobileNumber', 'user' , 'date_of_birth']
+        fields = ['id', 'Emp_id', 'date_joined','first_name', 'last_name', 'Role', 'FatherName', 'MotherName', 'PersonalMobileNumber', 'user' , 'date_of_birth', 'adhaar_number', 'pan_number', 'emergency_number']
 
     def get_Name(self, obj):
         return f"{obj.user.first_name} {obj.user.last_name}" if obj.user else None

@@ -67,6 +67,10 @@ MIDDLEWARE = [
 CORS_ORIGIN_ALLOW_ALL = True
 ROOT_URLCONF = 'backend.urls'
 
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+
+APPS_DIR = ROOT_DIR / "modules"
+print("------------", APPS_DIR)
 
 from datetime import timedelta
 
@@ -113,7 +117,7 @@ DATABASES = {
         'NAME': 'peoplemanagement',
         'USER': 'root',
         # 'PASSWORD': 'rootpassword'    ,
-        'PASSWORD': 'Boss@8055',
+        'PASSWORD': 'root',
         'HOST': 'localhost',  
         'PORT': '3306',       
     }

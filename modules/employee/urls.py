@@ -1,9 +1,7 @@
 from django.urls import path,include
 from django.http import JsonResponse
 from rest_framework.routers import DefaultRouter
-from .views import EmployeeViewSet, LeaveTypeCreateView, LeaveTypeListView, LeaveTypeUpdateView, LeaveTypeDeleteView, LeavePolicyCreateView, LeavePolicyListView, LeavePolicyUpdateView, LeavePolicyDeleteView, EmployeeLeaveBalanceView, AdminLeaveBalancesView, ApplyForLeaveView, EmployeeLeaveRequestsView, AdminLeaveRequestsView, ReporteesLeaveBalanceView, TestResetLeaveBalanceView, ViewLeaveRequestView, UpdateLeaveRequestStatusView, reset_leave_balances
-from .views import CompanyListCreateAPIView, CreateEmployeeView, ApproveRejectLeaveRequest, EmployeeListView, CurrentEmployeeView, ReporteesLeaveRequestsView, ReporteesListView, ProfileView, UserProfileView , UserFileViewSet, EmployeeGetUpdateView, HolidayListView, HolidayDetailView, EditLeavePolicyView, LeavePolicyTransactionView
-from .views import CompanyListCreateAPIView, CreateEmployeeView, ApproveRejectLeaveRequest, EmployeeListView, CurrentEmployeeView, ReporteesLeaveRequestsView, ReporteesListView, ProfileView, UserProfileView , UserFileViewSet, EmployeeGetUpdateView, HolidayListView, HolidayDetailView, QuarterlyLeaveCalculationView, YearlyLeaveCalculationView, NewHireView
+from .views import *
 from django.conf import settings
 from django.conf.urls.static import static
 
@@ -42,6 +40,7 @@ urlpatterns = [
     # Leave Request Management
     path('leave-requests/apply/', ApplyForLeaveView.as_view(), name='apply_for_leave'),
     path('leave-requests/', EmployeeLeaveRequestsView.as_view(), name='employee_leave_requests'),
+    path('leave-requests-cancel/<int:pk>/', EmployeeLeaveRequestsView.as_view(), name='cancel-leave-request'),
     path('admin/leave-requests/', AdminLeaveRequestsView.as_view(), name='admin_leave_requests'),
     path('leave-requests/<int:pk>/', ViewLeaveRequestView.as_view(), name='view_leave_request'),
     path('reportees/', ReporteesListView.as_view(), name='reportees_list'),
@@ -64,6 +63,6 @@ urlpatterns = [
     # GET /api/yearly-leaves/123/?year=2023
     path('yearly-leaves/<int:employee_id>/', YearlyLeaveCalculationView.as_view(), name='yearly_leave_calculation'),
     path('new-hires/', NewHireView.as_view(), name='new-hires'),
-
+    path('educations/', EmployeeEducationListCreateView.as_view(), name='education-list-create'),
 ]
 
