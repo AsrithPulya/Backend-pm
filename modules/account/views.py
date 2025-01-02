@@ -22,12 +22,10 @@ from django.db import transaction
 import random
 import logging
 from django.db import transaction
-from faker import Faker
 from django.core.exceptions import ValidationError
 import datetime
 from .permssions import IsAdmin, IsManager, IsEmployee, IsAdminOrManager
 
-fake = Faker()
 
 class RegisterUser(APIView):
     def post(self, request):
@@ -81,7 +79,7 @@ class RegisterUser(APIView):
                     {"error": f"Failed to create user and employee record: {str(e)}"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
-        
+        print(serializer.errors, "<<<")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 
@@ -130,9 +128,17 @@ class RegisterUser(APIView):
 class UserView(APIView):
     permission_classes = [IsAdmin]
     def get(self, request):
-        
+        name_query = request.query_params.get('name', '')
+        print("namequery", name_query)
         users = User.objects.select_related('reporting_manager').all()  # Fetch users and their managers efficiently
-        # Custom logic for including manager names in the serialized response
+        if name_query:
+            users = users.filter(
+                first_name__icontains=name_query
+            ) | users.filter(
+                last_name__icontains=name_query
+            ) | users.filter(
+                username__icontains=name_query
+            )
         user_data = [
             {
                 'name': user.get_full_name() or user.username,
@@ -440,3 +446,39 @@ class NewHiresView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class ChangeManagerView(APIView):
+    permission_classes = [IsAdmin]
+
+    def put(self, request):
+        """
+        Updates the reporting manager for a specific user.
+        """
+        user_id = request.data.get('user_id')
+        new_manager_id = request.data.get('new_manager_id')
+
+        # Validate that both `user_id` and `new_manager_id` are provided.
+        if not user_id or not new_manager_id:
+            return Response({'detail': 'Both user_id and new_manager_id are required.'}, status=400)
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found'}, status=404)
+
+        try:
+            new_manager = User.objects.get(id=new_manager_id, role__in=[1,3])  
+        except User.DoesNotExist:
+            return Response({'detail': 'Manager not found or invalid manager ID.'}, status=404)
+
+        # Validate that a user cannot be their own manager.
+        if user.id == new_manager.id:
+            return Response({'detail': 'A user cannot be their own manager.'}, status=400)
+
+        # Update the manager relationship.
+        user.reporting_manager_id = new_manager
+        user.save()
+
+        return Response(
+            {'detail': 'Manager updated successfully.', 'user': UserSerializerList(user).data},
+            status=200
+        )

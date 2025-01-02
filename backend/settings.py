@@ -117,7 +117,7 @@ DATABASES = {
         'NAME': 'peoplemanagement',
         'USER': 'root',
         # 'PASSWORD': 'rootpassword'    ,
-        'PASSWORD': 'root',
+        'PASSWORD': 'Arris@123',
         'HOST': 'localhost',  
         'PORT': '3306',       
     }

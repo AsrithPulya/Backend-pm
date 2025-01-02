@@ -64,5 +64,6 @@ urlpatterns = [
     path('yearly-leaves/<int:employee_id>/', YearlyLeaveCalculationView.as_view(), name='yearly_leave_calculation'),
     path('new-hires/', NewHireView.as_view(), name='new-hires'),
     path('educations/', EmployeeEducationListCreateView.as_view(), name='education-list-create'),
+    path('educations/<int:pk>/', EmployeeEducationListCreateView.as_view(), name='education-list')
 ]
 

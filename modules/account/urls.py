@@ -1,6 +1,5 @@
 from django.urls import path
-from .views import RegisterUser, LoginUser, ReportingManagerListView, UserDetailView, ForgotPasswordView, ResetPasswordView, UserView
-from .views import NewHiresView
+from .views import *
 urlpatterns = [
     path('register/', RegisterUser.as_view(), name='registeruser'),
     path('login/', LoginUser.as_view(), name='loginuser'),
@@ -13,5 +12,6 @@ urlpatterns = [
     path('new-hires/', NewHiresView.as_view(), name='new-hires'),
 
     path('users/update_role/', UserView.as_view(), name='update_role'), #testing for updating role
+    path('users/update-manager/', ChangeManagerView.as_view(), name='update-manager'),
 
 ]

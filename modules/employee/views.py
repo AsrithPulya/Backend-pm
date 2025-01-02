@@ -1319,6 +1319,12 @@ class EmployeeEducationListCreateView(APIView):
     """
     View to list all employee educations or create a new one.
     """
+    def get_object(self, pk):
+        try:
+            return EmployeeEducation.objects.get(pk=pk)
+        except EmployeeEducation.DoesNotExist:
+            raise NotFound("Education not found.")
+    
     def get(self, request):
         educations = EmployeeEducation.objects.all()
         serializer = EmployeeEducationSerializer(educations, many=True)
@@ -1326,8 +1332,22 @@ class EmployeeEducationListCreateView(APIView):
 
     def post(self, request):
         serializer = EmployeeEducationSerializer(data=request.data)
+        print("data", request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def put(self, request, pk):
+        education = self.get_object(pk)
+        serializer = EmployeeEducationSerializer(education, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        education = self.get_object(pk)
+        education.delete()
+        return Response({"detail": "Deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
 

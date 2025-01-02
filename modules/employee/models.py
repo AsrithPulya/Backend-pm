@@ -22,7 +22,7 @@ class Employee(models.Model):
     father_name = models.CharField(max_length=50, null=True, blank=True)
     mother_name = models.CharField(max_length=50, null=True, blank=True)
     phone_number = models.CharField(max_length=10, null=True, blank=True) 
-    adhaar_number = models.CharField(max_length=12, unique=True, blank=True, null=True)
+    adhaar_number = models.CharField(max_length=12, unique=False, blank=True, null=True)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="employee")
     pan_number = models.CharField(max_length=12, unique=True, blank=True, null=True)
     emergency_number = models.CharField(max_length=10, unique=True, blank=True, null=True)
