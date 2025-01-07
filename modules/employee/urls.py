@@ -11,7 +11,7 @@ def test_view(request):
  
 #files upload 
 router = DefaultRouter()
-router.register(r'files', UserFileViewSet, basename='userfile')
+# router.register(r'files', UserFileViewSet, basename='userfile')
 router.register(r'employees', EmployeeViewSet, basename='employee')
 
 urlpatterns = [
@@ -64,6 +64,6 @@ urlpatterns = [
     path('yearly-leaves/<int:employee_id>/', YearlyLeaveCalculationView.as_view(), name='yearly_leave_calculation'),
     path('new-hires/', NewHireView.as_view(), name='new-hires'),
     path('educations/', EmployeeEducationListCreateView.as_view(), name='education-list-create'),
-    path('educations/<int:pk>/', EmployeeEducationListCreateView.as_view(), name='education-list')
+    path('educations/<int:pk>/', EmployeeEducationListCreateView.as_view(), name='education-list'),
+    path('employee-attachments/', EmployeeAttachmentAPIListCreateView.as_view(), name='employee-attachments'),
 ]
-

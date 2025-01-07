@@ -27,7 +27,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-
+import os
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "C:/Users/cron/Downloads/upheld-altar-216210-c7be04342362.json"
+GCS_BUCKET_NAME = "med-screen-prod"
+GCS_UPLOAD_DIR = "documents-pm/"
 # Application definition
 
 INSTALLED_APPS = [
@@ -117,7 +120,7 @@ DATABASES = {
         'NAME': 'peoplemanagement',
         'USER': 'root',
         # 'PASSWORD': 'rootpassword'    ,
-        'PASSWORD': 'Arris@123',
+        'PASSWORD': 'root',
         'HOST': 'localhost',  
         'PORT': '3306',       
     }

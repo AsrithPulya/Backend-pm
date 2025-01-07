@@ -49,22 +49,29 @@ class EmployeeEducation(models.Model):
     start_year = models.DateField()
     end_year = models.DateField()
     employee = models.ForeignKey(Employee, related_name="employee_educations", on_delete=models.CASCADE)
-#Employee Attachments Model
-class EmployeeAttachments(models.Model):
-    filename = models.CharField(max_length=50)
-    created_by = models.CharField(max_length=50)  
-    created_on = models.DateTimeField(auto_now_add=True)
-    file = models.FileField(upload_to='attachments/')
-    employee = models.ForeignKey(Employee, related_name="employee_attachments", on_delete=models.CASCADE)
-#UserFiles Model
-class UserFile(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    file = models.FileField(upload_to='user_files/')
-    file_name = models.CharField(max_length=255)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return f"{self.user.username} - {self.file_name}"
+
+#Employee Attachments Model
+DOCUMENTS = (
+    ('aadhar', 'Aadhar Card'),
+    ('pan', 'Pan Card'),
+)
+class EmployeeAttachments(models.Model):
+    employee = models.ForeignKey(Employee, related_name="employee_attachments", on_delete=models.CASCADE)
+    document_type = models.CharField(max_length=20, choices=DOCUMENTS, default='aadhar' )
+    file_name = models.CharField(max_length=255)
+    created_on = models.DateTimeField(auto_now_add=True)
+
+
+#UserFiles Model
+# class UserFile(models.Model):
+#     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+#     file = models.FileField(upload_to='user_files/')
+#     file_name = models.CharField(max_length=255)
+#     uploaded_at = models.DateTimeField(auto_now_add=True)
+
+#     def __str__(self):
+#         return f"{self.user.username} - {self.file_name}"
     
 #LEAVE MANAGEMENT MODULE
 #Types of Leaves Model

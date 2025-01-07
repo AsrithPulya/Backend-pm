@@ -59,12 +59,31 @@ class ProfileSerializer(serializers.ModelSerializer):
         if obj.user:
             return f"{obj.user.role}"
         return None
-
+    
 class UserFileSerializer(serializers.ModelSerializer):
+    file = serializers.FileField(write_only=True)  # Field for file upload
+    file_name = serializers.CharField(read_only=True)  # Mark file_name as read-only
+
     class Meta:
-        model = UserFile
-        fields = ['id', 'user', 'file', 'file_name', 'uploaded_at']
-        read_only_fields = ['user']
+        model = EmployeeAttachments
+        fields = ['employee', 'document_type', 'file', 'file_name']
+
+    def create(self, validated_data):
+        # Extract the uploaded file
+        file = validated_data.pop('file', None)
+
+        # Set `file_name` dynamically from the file's name
+        if file:
+            validated_data['file_name'] = file.name
+
+        # Create and return the EmployeeAttachments record
+        return EmployeeAttachments.objects.create(**validated_data)
+
+# class UserFileSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = EmployeeAttachments
+#         fields = '__all__'
+
 
 class EmployeeEducationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -157,4 +176,3 @@ class LeavePolicySerializer(serializers.ModelSerializer):
     class Meta:
         model = LeavePolicyTypes
         fields = '__all__'
-

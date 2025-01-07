@@ -44,7 +44,6 @@ from django.core.files.storage import default_storage
 from django.db import transaction
 from rest_framework import viewsets, permissions
 from rest_framework.parsers import MultiPartParser, FormParser
-from .models import UserFile
 from .serializers import UserFileSerializer
 from modules.account.permssions import IsAdmin, IsEmployee, IsAdminOrManager, IsManager
 from rest_framework.decorators import permission_classes
@@ -118,44 +117,44 @@ class EmployeeViewSet(viewsets.ViewSet):
         employee.delete()
         return Response(status=204)
     
-class UserFileViewSet(viewsets.ModelViewSet):
-    queryset = UserFile.objects.all()
-    serializer_class = UserFileSerializer
-    permission_classes = [IsAuthenticated]
+# class UserFileViewSet(viewsets.ModelViewSet):
+#     queryset = UserFile.objects.all()
+#     serializer_class = UserFileSerializer
+#     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+#     def get_queryset(self):
          
-        return UserFile.objects.filter(user=self.request.user)
+#         return UserFile.objects.filter(user=self.request.user)
 
-    def perform_create(self, serializer):
-       serializer.save(user=self.request.user)
+#     def perform_create(self, serializer):
+#        serializer.save(user=self.request.user)
 
 
-    def update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        new_file = request.FILES.get('file', None)
+#     def update(self, request, *args, **kwargs):
+#         instance = self.get_object()
+#         new_file = request.FILES.get('file', None)
 
         
-        if new_file and instance.file:
-            try:
-                default_storage.delete(instance.file.path)
-            except Exception as e:
-                return Response(
-                    {"detail": f"Error deleting old file: {str(e)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+#         if new_file and instance.file:
+#             try:
+#                 default_storage.delete(instance.file.path)
+#             except Exception as e:
+#                 return Response(
+#                     {"detail": f"Error deleting old file: {str(e)}"},
+#                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#                 )
 
          
-        return super().update(request, *args, **kwargs)
+#         return super().update(request, *args, **kwargs)
 
-    def destroy(self, request, *args, **kwargs):
-        file_instance = self.get_object()
-        if file_instance.user != request.user:
-            return Response(
-                {"detail": "You are not authorized to delete this file."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        return super().destroy(request, *args, **kwargs)
+#     def destroy(self, request, *args, **kwargs):
+#         file_instance = self.get_object()
+#         if file_instance.user != request.user:
+#             return Response(
+#                 {"detail": "You are not authorized to delete this file."},
+#                 status=status.HTTP_403_FORBIDDEN
+#             )
+#         return super().destroy(request, *args, **kwargs)
 class ProfileView(APIView):
     def get(self, request):
         employees = Employee.objects.all()
@@ -1350,4 +1349,70 @@ class EmployeeEducationListCreateView(APIView):
         education = self.get_object(pk)
         education.delete()
         return Response({"detail": "Deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+    
 
+import os
+from google.cloud import storage  # GCS client
+from django.conf import settings
+from .models import EmployeeAttachments
+from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+
+
+class EmployeeAttachmentAPIListCreateView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        """
+        API endpoint to upload a document for an employee.
+        Stores the uploaded file in a GCS bucket.
+        """
+        serializer = UserFileSerializer(data=request.data, context={"request": request})
+        
+        if serializer.is_valid():
+            file = request.FILES['file']  # Get the uploaded file
+            employee = serializer.validated_data['employee']
+            document_type = serializer.validated_data['document_type']
+            file_name = file.name
+
+            # Upload file to GCS
+            try:
+                client = storage.Client()  # Initialize GCS client
+                bucket = client.bucket(settings.GCS_BUCKET_NAME)
+                gcs_path = os.path.join(settings.GCS_UPLOAD_DIR, str(employee.id), file_name)
+                blob = bucket.blob(gcs_path)
+                blob.upload_from_file(file, content_type=file.content_type)
+
+                # Save record in the database
+                EmployeeAttachments.objects.create(
+                    employee=employee,
+                    document_type=document_type,
+                    file_name=gcs_path,
+                )
+
+                return Response(
+                    {"message": "File uploaded successfully.", "file_url": blob.public_url},
+                    status=status.HTTP_201_CREATED,
+                )
+
+            except Exception as e:
+                return Response(
+                    {"error": f"Failed to upload file to GCS: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def get(self, request, *args, **kwargs):
+        employee_id = request.query_params.get('employee', None) 
+        queryset = EmployeeAttachments.objects.all()
+
+        if employee_id:
+            queryset = queryset.filter(employee__pk=employee_id)  
+
+        serializer = UserFileSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
