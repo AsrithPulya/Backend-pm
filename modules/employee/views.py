@@ -472,12 +472,20 @@ class ReporteesLeaveRequestsView(APIView):
     permission_classes = [IsAdminOrManager] #working
     def get(self, request):
         # Fetch reportees' leave requests
-        reportees = request.user.reportees.all()  
-        leave_requests = EmployeeLeavesRequests.objects.filter(
-            employee__user__in=reportees
-        ).order_by('-id')
-
-        # Paginate results
+        # reportees = request.user.reportees.all()  
+        # leave_requests = EmployeeLeavesRequests.objects.filter(
+        #     employee__user__in=reportees
+        # ).order_by('-id')0
+        if request.user.role == 1:
+        # Fetch all leave requests if the user is an admin
+            leave_requests = EmployeeLeavesRequests.objects.all().order_by('-id')
+        else:
+        # Fetch only reportees' leave requests for non-admin users
+            reportees = request.user.reportees.all()
+            leave_requests = EmployeeLeavesRequests.objects.filter(
+                employee__user__in=reportees
+            ).order_by('-id')
+            # Paginate results
         paginator = ReporteesLeaveRequestsPagination()
         paginated_leave_requests = paginator.paginate_queryset(leave_requests, request)
 
@@ -1332,6 +1340,15 @@ class EmployeeEducationListCreateView(APIView):
 
     def post(self, request):
         serializer = EmployeeEducationSerializer(data=request.data)
+        education_type = request.data.get('education_type')
+        employee_id = request.data.get('employee')  # Assuming `employee` is sent in the request data
+    
+    # Check if the same education type exists for the employee
+        if EmployeeEducation.objects.filter(education_type=education_type, employee_id=employee_id).exists():
+            return Response(
+                {"error": f"The education type '{education_type}' already exists"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         print("data", request.data)
         if serializer.is_valid():
             serializer.save()
