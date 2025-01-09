@@ -60,11 +60,39 @@ class ProfileSerializer(serializers.ModelSerializer):
             return f"{obj.user.role}"
         return None
 
+from google.cloud import storage
+
 class UserFileSerializer(serializers.ModelSerializer):
+    file = serializers.FileField(write_only=True)  # Field for file upload
+    file_name = serializers.CharField(read_only=True)  # Mark file_name as read-only
+    file_url = serializers.SerializerMethodField()
+
     class Meta:
-        model = UserFile
-        fields = ['id', 'user', 'file', 'file_name', 'uploaded_at']
-        read_only_fields = ['user']
+        model = EmployeeAttachments
+        fields = ['employee', 'document_type', 'file', 'file_name', 'file_url']
+
+    def create(self, validated_data):
+        # Extract the uploaded file
+        file = validated_data.pop('file', None)
+
+        # Set `file_name` dynamically from the file's name
+        if file:
+            validated_data['file_name'] = file.name
+
+        # Create and return the EmployeeAttachments record
+        return EmployeeAttachments.objects.create(**validated_data)
+
+    def get_file_url(self, obj):
+        client = storage.Client()  # Initialize GCS client
+        bucket = client.bucket(settings.GCS_BUCKET_NAME)
+        blob = bucket.blob(obj.file_name)  # Use the `file_name` stored in the database
+        return blob.public_url  # Return the public URL
+
+# class UserFileSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = EmployeeAttachments
+#         fields = '__all__'
+
 
 class EmployeeEducationSerializer(serializers.ModelSerializer):
     class Meta:
