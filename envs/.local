@@ -1,0 +1,16 @@
+
+DB_ENGINE=django.db.backends.mysql
+DB_NAME=peoplemanagement
+DB_USER=root
+DB_PASSWORD=root
+DB_LOCALHOST=localhost
+DB_PORT=3306
+
+
+EMAIL_USER='abhilash.work05@gmail.com'
+EMAIL_PASSWORD='erdcsfaasyzocdiz'
+
+FRONTEND_URL='http://localhost:3000/' #env local
+
+GCP_BUCKET_NAME='med-screen-prod'
+GCS_UPLOAD_DIR = 'documents-pm-test/'
