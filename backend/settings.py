@@ -30,7 +30,7 @@ ALLOWED_HOSTS = []
 import os
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "C:/Users/cron/Downloads/upheld-altar-216210-c7be04342362.json"
 GCS_BUCKET_NAME = "med-screen-prod"
-GCS_UPLOAD_DIR = "documents-pm/"
+GCS_UPLOAD_DIR = "documents-pm-test/"
 # Application definition
 
 INSTALLED_APPS = [
